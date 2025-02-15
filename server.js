@@ -204,10 +204,10 @@ app.post('/register-client', (req, res) => {
     }
 
     const sql = `
-        INSERT INTO ClientTable (Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Last_Modif_By)
+        INSERT INTO ClientTable (Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Saldo, Last_Lat_Long, Last_Modif_By)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
-    const values = [Descript, NombreRef || null, DNIRef || null, Nro_WSP || null, Correo || null, Ref_Address || null, Last_Lat_Long || null, Last_Modif_By];
+    const values = [Descript, NombreRef || null, DNIRef || null, Nro_WSP || null, Correo || null, Ref_Address || null, Saldo || null, Last_Lat_Long || null, Last_Modif_By];
 
     db.run(sql, values, function (err) {
         if (err) {
