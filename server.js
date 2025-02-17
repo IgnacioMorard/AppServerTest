@@ -221,6 +221,7 @@ app.post("/register-client", (req, res) => {
 });
 
 
+
 // POST endpoint to register a new product/service
 app.post('/register-product', (req, res) => {
     const { Descript, Valor, UserID } = req.body;
@@ -470,6 +471,19 @@ app.post('/updateClientData', (req, res) => {
         return res.json({ message: 'Client data updated successfully' });
     });
 });
+
+app.get("/clients", (req, res) => {
+    const sql = "SELECT * FROM ClientTable"; // Fetch all clients
+
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            console.error("Error fetching data:", err.message);
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(rows); // Return all clients
+    });
+});
+
 
 
 // Start the server
