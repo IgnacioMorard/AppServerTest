@@ -192,8 +192,8 @@ app.post('/register', (req, res) => {
   });
 
 // POST endpoint to register a new client
-app.post('/register-client', (req, res) => {
-    const { Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Last_Modif_By } = req.body;
+app.post("/register-client", (req, res) => {
+    const { Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo, Last_Modif_By } = req.body;
 
     // Validate required fields
     if (!Descript) {
@@ -204,10 +204,10 @@ app.post('/register-client', (req, res) => {
     }
 
     const sql = `
-        INSERT INTO ClientTable (Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Saldo, Last_Lat_Long, Last_Modif_By)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+        INSERT INTO ClientTable (Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo, Last_Modif_By)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-    const values = [Descript, NombreRef || null, DNIRef || null, Nro_WSP || null, Correo || null, Ref_Address || null, Saldo || null, Last_Lat_Long || null, Last_Modif_By];
+    const values = [Descript, NombreRef || null, DNIRef || null, Nro_WSP || null, Correo || null, Ref_Address || null, Last_Lat_Long || null, Saldo || 0, Last_Modif_By];
 
     db.run(sql, values, function (err) {
         if (err) {
@@ -219,6 +219,7 @@ app.post('/register-client', (req, res) => {
         });
     });
 });
+
 
 // POST endpoint to register a new product/service
 app.post('/register-product', (req, res) => {
