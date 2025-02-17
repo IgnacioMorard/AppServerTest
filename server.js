@@ -91,6 +91,19 @@ db.serialize(() => {
             Valor INTEGER NOT NULL,
             FechaAct DATETIME DEFAULT CURRENT_TIMESTAMP,
             UserID INTEGER NOT NULL,
+            Status TEXT NOT NULL DEFAULT 'Activo',
+            FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
+        );
+    `);    
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS Egresos (
+            EgresoID INTEGER PRIMARY KEY AUTOINCREMENT,
+            UserID INTEGER NOT NULL,
+            FechaAct DATETIME DEFAULT CURRENT_TIMESTAMP,
+            Class TEXT NOT NULL,   -- Type of expense (Mecanico, Combustible, Varios)
+            Descript TEXT NOT NULL, -- Additional details
+            Valor INTEGER NOT NULL,
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
     `);
@@ -230,9 +243,9 @@ app.post('/register-product', (req, res) => {
     if (!Descript) {
         return res.status(400).json({ error: "Descript is required" });
     }
-    if (!Valor || isNaN(Valor)) {
+    if (Valor === undefined || isNaN(Valor)) {
         return res.status(400).json({ error: "Valid Valor is required" });
-    }
+    }    
     if (!UserID) {
         return res.status(400).json({ error: "UserID is required" });
     }
@@ -310,9 +323,14 @@ app.post('/registerTransaction', (req, res) => {
 });
 
 
-// Fetch available products
+// Fetch only "Activo" products
 app.get("/products", (req, res) => {
-    db.all("SELECT Srvc_Prod_ID, Descript, Valor FROM Srvc_ProdTable", [], (err, rows) => {
+    const sql = `
+        SELECT Srvc_Prod_ID, Descript, Valor 
+        FROM Srvc_ProdTable 
+        WHERE Status = 'Activo'`;
+
+    db.all(sql, [], (err, rows) => {
         if (err) {
             return res.status(500).json({ error: err.message });
         }
@@ -324,9 +342,10 @@ app.get("/products", (req, res) => {
             Valor: parseFloat(row.Valor)  // Ensuring Valor is a number
         }));
 
-        res.json(products);  // Return the modified products array
+        res.json(products);  // Return the filtered products array
     });
 });
+
 
 app.post('/registerInventory', (req, res) => {
     //console.log('Request Body:', req.body); // Log the full request body
@@ -484,6 +503,84 @@ app.get("/clients", (req, res) => {
     });
 });
 
+app.post('/add-egreso', (req, res) => {
+    const { UserID, Class, Descript, Valor } = req.body;
+
+    // Validate required fields
+    if (!UserID) return res.status(400).json({ error: "UserID is required" });
+    if (!Class) return res.status(400).json({ error: "Class (expense type) is required" });
+    if (!Descript) return res.status(400).json({ error: "Descript is required" });
+    if (Valor === undefined || isNaN(Valor)) {
+        return res.status(400).json({ error: "Valid Valor is required" });
+    }
+
+    const sql = `INSERT INTO Egresos (UserID, Class, Descript, Valor) VALUES (?, ?, ?, ?)`;
+    const values = [UserID, Class, Descript, Valor];
+
+    db.run(sql, values, function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+
+        res.json({
+            message: "Egreso added successfully",
+            EgresoID: this.lastID
+        });
+    });
+});
+
+app.get("/products/all", (req, res) => {
+    const sql = "SELECT Srvc_Prod_ID, Descript, Valor, Status FROM Srvc_ProdTable"; // Get all products
+
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        const products = rows.map(row => ({
+            Srvc_Prod_ID: row.Srvc_Prod_ID,
+            Descript: row.Descript,
+            Valor: parseFloat(row.Valor), // Ensure Valor is a number
+            Status: row.Status
+        }));
+
+        res.json(products);
+    });
+});
+
+app.patch("/update-product/:id", (req, res) => {
+    const { id } = req.params;
+    const { Descript, Valor } = req.body;
+
+    if (!Descript || Valor === undefined || isNaN(Valor)) {
+        return res.status(400).json({ error: "Valid Descript and Valor are required" });
+    }
+
+    const sql = `UPDATE Srvc_ProdTable SET Descript = ?, Valor = ? WHERE Srvc_Prod_ID = ?`;
+
+    db.run(sql, [Descript, Valor, id], function (err) {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        if (this.changes === 0) return res.status(404).json({ message: "Product not found" });
+
+        res.json({ message: "Product updated successfully" });
+    });
+});
+
+app.patch("/update-product-status/:id", (req, res) => {
+    const { id } = req.params;
+    const { Status } = req.body;
+
+    if (!Status) return res.status(400).json({ error: "Status is required" });
+
+    const sql = `UPDATE Srvc_ProdTable SET Status = ? WHERE Srvc_Prod_ID = ?`;
+
+    db.run(sql, [Status, id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "Product not found" });
+
+        res.json({ message: "Status updated successfully" });
+    });
+});
 
 
 // Start the server
