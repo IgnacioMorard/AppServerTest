@@ -583,12 +583,25 @@ app.patch("/update-product-status/:id", (req, res) => {
 });
 
 app.get("/report", (req, res) => {
-    const { startDate, endDate, UserID } = req.query;
+    let { range, UserID } = req.query;
 
-    if (!startDate || !endDate) {
-        return res.status(400).json({ error: "startDate and endDate are required" });
+    // Calculate date range based on "range" parameter
+    let dateFilter;
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0]; // YYYY-MM-DD
+
+    if (range === "today") {
+        dateFilter = `DATE(Fecha) = '${todayStr}'`;
+    } else if (range === "week") {
+        dateFilter = `DATE(Fecha) >= DATE('${todayStr}', 'weekday 0', '-6 days') 
+                      AND DATE(Fecha) <= DATE('${todayStr}', 'weekday 0')`;
+    } else if (range === "month") {
+        dateFilter = `strftime('%Y-%m', Fecha) = strftime('%Y-%m', '${todayStr}')`;
+    } else {
+        return res.status(400).json({ error: "Invalid range. Use 'today', 'week', or 'month'." });
     }
 
+    // SQL Query
     const sql = `
         WITH SalesSummary AS (
             SELECT 
@@ -599,7 +612,7 @@ app.get("/report", (req, res) => {
             FROM InventarioTable I
             JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
             JOIN TransacTable T ON I.TransacID = T.TransacID
-            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+            WHERE ${dateFilter}
             AND (? IS NULL OR T.UserID = ?)  
             GROUP BY I.Srvc_Prod_ID
         ),
@@ -608,7 +621,7 @@ app.get("/report", (req, res) => {
                 Class, 
                 SUM(Valor) AS TotalEgresos
             FROM Egresos
-            WHERE DATE(FechaAct) BETWEEN ? AND ?
+            WHERE ${dateFilter}
             AND (? IS NULL OR UserID = ?)  
             GROUP BY Class
         ),
@@ -616,7 +629,7 @@ app.get("/report", (req, res) => {
             SELECT 
                 EgresoID, UserID, FechaAct, Class, Descript, Valor
             FROM Egresos
-            WHERE DATE(FechaAct) BETWEEN ? AND ?
+            WHERE ${dateFilter}
             AND (? IS NULL OR UserID = ?)  
         ),
         DetailedTransactions AS (
@@ -626,7 +639,7 @@ app.get("/report", (req, res) => {
                 T.Lat_Long, T.Fecha
             FROM TransacTable T
             JOIN UserTable U ON T.UserID = U.UserID
-            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+            WHERE ${dateFilter}
             AND (? IS NULL OR T.UserID = ?)  
         )
         SELECT * FROM SalesSummary
@@ -637,12 +650,7 @@ app.get("/report", (req, res) => {
         UNION ALL
         SELECT * FROM DetailedTransactions;`;
 
-    const params = [
-        startDate, endDate, UserID || null, UserID || null,  // SalesSummary
-        startDate, endDate, UserID || null, UserID || null,  // EgresosSummary
-        startDate, endDate, UserID || null, UserID || null,  // DetailedEgresos
-        startDate, endDate, UserID || null, UserID || null   // DetailedTransactions
-    ];
+    const params = [UserID || null, UserID || null, UserID || null, UserID || null, UserID || null, UserID || null];
 
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
