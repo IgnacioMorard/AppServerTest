@@ -582,6 +582,76 @@ app.patch("/update-product-status/:id", (req, res) => {
     });
 });
 
+app.get("/report", (req, res) => {
+    const { startDate, endDate, UserID } = req.query;
+
+    if (!startDate || !endDate) {
+        return res.status(400).json({ error: "startDate and endDate are required" });
+    }
+
+    const sql = `
+        WITH SalesSummary AS (
+            SELECT 
+                I.Srvc_Prod_ID, 
+                P.Descript AS ProductName, 
+                SUM(I.Amount) AS TotalSold, 
+                SUM(I.Amount * I.Costo) AS TotalRevenue
+            FROM InventarioTable I
+            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
+            JOIN TransacTable T ON I.TransacID = T.TransacID
+            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+            AND (? IS NULL OR T.UserID = ?)  
+            GROUP BY I.Srvc_Prod_ID
+        ),
+        EgresosSummary AS (
+            SELECT 
+                Class, 
+                SUM(Valor) AS TotalEgresos
+            FROM Egresos
+            WHERE DATE(FechaAct) BETWEEN ? AND ?
+            AND (? IS NULL OR UserID = ?)  
+            GROUP BY Class
+        ),
+        DetailedEgresos AS (
+            SELECT 
+                EgresoID, UserID, FechaAct, Class, Descript, Valor
+            FROM Egresos
+            WHERE DATE(FechaAct) BETWEEN ? AND ?
+            AND (? IS NULL OR UserID = ?)  
+        ),
+        DetailedTransactions AS (
+            SELECT 
+                T.TransacID, T.ClientID, T.UserID, U.Nombre AS UserName, 
+                T.Valor, T.Pago_EFE, T.Pago_MP, T.Pago_BOT, T.Deuda, 
+                T.Lat_Long, T.Fecha
+            FROM TransacTable T
+            JOIN UserTable U ON T.UserID = U.UserID
+            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+            AND (? IS NULL OR T.UserID = ?)  
+        )
+        SELECT * FROM SalesSummary
+        UNION ALL
+        SELECT * FROM EgresosSummary
+        UNION ALL
+        SELECT * FROM DetailedEgresos
+        UNION ALL
+        SELECT * FROM DetailedTransactions;`;
+
+    const params = [
+        startDate, endDate, UserID || null, UserID || null,  // SalesSummary
+        startDate, endDate, UserID || null, UserID || null,  // EgresosSummary
+        startDate, endDate, UserID || null, UserID || null,  // DetailedEgresos
+        startDate, endDate, UserID || null, UserID || null   // DetailedTransactions
+    ];
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        res.json(rows);
+    });
+});
+
+
 
 // Start the server
 app.listen(9904, () => {
