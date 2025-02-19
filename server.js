@@ -719,7 +719,7 @@ app.get("/report", (req, res) => {
                 U.Nombre AS UserName,
                 COALESCE(SUM(T.Pago_EFE), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_caja,
                 COALESCE(SUM(T.Pago_EFE), 0) + COALESCE(SUM(T.Pago_MP), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_ingresos,
-                json_group_array(DISTINCT json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS user_product_sales,
+                json_group_array(json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS user_product_sales,
                 COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_egresos
             FROM FilteredTransactions T
             JOIN UserTable U ON T.UserID = U.UserID
@@ -735,7 +735,7 @@ app.get("/report", (req, res) => {
             GROUP BY Class
         ),
         DetailedExpenses AS (
-            SELECT 
+            SELECT DISTINCT 
                 U.Nombre AS UserName,
                 E.Class,
                 E.Descript,
@@ -750,7 +750,7 @@ app.get("/report", (req, res) => {
             (SELECT product_sales FROM TotalSummary) AS product_sales,
             (SELECT egresos_totales FROM TotalSummary) AS egresos_totales,
             json_group_array(DISTINCT json_object('UserName', UserName, 'UserCaja', user_caja, 'UserIngresos', user_ingresos, 'UserProductSales', user_product_sales, 'UserEgresos', user_egresos)) AS per_user_summary,
-            json_group_array(json_object('Category', ExpenseCategory, 'TotalSpent', TotalSpent)) AS expenses_breakdown,
+            json_group_array(DISTINCT json_object('Category', ExpenseCategory, 'TotalSpent', TotalSpent)) AS expenses_breakdown,
             json_group_array(DISTINCT json_object('UserName', UserName, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS detailed_expenses
         FROM UserSummary, ExpensesBreakdown, DetailedExpenses;
     `;
@@ -772,6 +772,7 @@ app.get("/report", (req, res) => {
         });
     });
 });
+
 
 
 
