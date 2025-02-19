@@ -687,18 +687,14 @@ const getDateRange = (rangeType) => {
     return { startDate, endDate };
 };
 
-// Report generation endpoint
 app.get("/report", (req, res) => {
     let { range } = req.query;
-
-    // Get date range based on user selection
     const { startDate, endDate } = getDateRange(range);
 
     if (!startDate || !endDate) {
         return res.status(400).json({ error: "Invalid range. Use 'today', 'week', or 'month'." });
     }
 
-    // SQL Query
     const sql = `
         WITH FilteredTransactions AS (
             SELECT * FROM TransacTable
@@ -708,45 +704,36 @@ app.get("/report", (req, res) => {
             SELECT * FROM Egresos
             WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
         ),
-        TotalSales AS (
+        TotalSummary AS (
             SELECT 
-                P.Descript AS ProductName, 
-                SUM(I.Amount) AS TotalSold
-            FROM InventarioTable I
-            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            JOIN FilteredTransactions T ON I.TransacID = T.TransacID
-            GROUP BY P.Srvc_Prod_ID
-        ),
-        CajaSummary AS (
-            SELECT 
-                COALESCE(SUM(T.Pago_EFE), 0) - COALESCE(SUM(E.Valor), 0) AS CajaTotal
+                COALESCE(SUM(T.Pago_EFE), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS total_caja,
+                COALESCE(SUM(T.Pago_EFE), 0) + COALESCE(SUM(T.Pago_MP), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS total_ingresos,
+                json_group_array(json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS product_sales,
+                COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS egresos_totales
             FROM FilteredTransactions T
-            LEFT JOIN FilteredEgresos E ON 1=1
+            LEFT JOIN InventarioTable I ON T.TransacID = I.TransacID
+            LEFT JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
         ),
-        PerUserSummary AS (
+        UserSummary AS (
             SELECT 
                 U.Nombre AS UserName,
-                COALESCE(SUM(T.Pago_EFE), 0) AS UserCaja,
-                json_group_array(json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS UserSales
+                COALESCE(SUM(T.Pago_EFE), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_caja,
+                COALESCE(SUM(T.Pago_EFE), 0) + COALESCE(SUM(T.Pago_MP), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_ingresos,
+                json_group_array(json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS user_product_sales,
+                COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_egresos
             FROM FilteredTransactions T
             JOIN UserTable U ON T.UserID = U.UserID
-            JOIN InventarioTable I ON T.TransacID = I.TransacID
-            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
+            LEFT JOIN InventarioTable I ON T.TransacID = I.TransacID
+            LEFT JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
             GROUP BY U.UserID
-        ),
-        ExpenseBreakdown AS (
-            SELECT 
-                Class AS ExpenseCategory, 
-                COALESCE(SUM(Valor), 0) AS TotalSpent
-            FROM FilteredEgresos
-            GROUP BY Class
         )
         SELECT 
-            (SELECT CajaTotal FROM CajaSummary) AS CajaTotal,
-            json_group_array(json_object('ProductName', ProductName, 'TotalSold', TotalSold)) AS TotalSales,
-            json_group_array(json_object('UserName', UserName, 'UserCaja', UserCaja, 'UserSales', UserSales)) AS PerUserCaja,
-            json_group_array(json_object('ExpenseCategory', ExpenseCategory, 'TotalSpent', TotalSpent)) AS ExpenseBreakdown
-        FROM TotalSales, PerUserSummary, ExpenseBreakdown;
+            (SELECT total_caja FROM TotalSummary) AS total_caja,
+            (SELECT total_ingresos FROM TotalSummary) AS total_ingresos,
+            (SELECT product_sales FROM TotalSummary) AS product_sales,
+            (SELECT egresos_totales FROM TotalSummary) AS egresos_totales,
+            json_group_array(json_object('UserName', UserName, 'UserCaja', user_caja, 'UserIngresos', user_ingresos, 'UserProductSales', user_product_sales, 'UserEgresos', user_egresos)) AS per_user_summary
+        FROM UserSummary;
     `;
 
     const params = [startDate, endDate, startDate, endDate];
@@ -756,13 +743,15 @@ app.get("/report", (req, res) => {
 
         res.json({
             time_range: range,
-            caja_total: row.CajaTotal || 0,
-            total_sales: JSON.parse(row.TotalSales || "[]"),
-            per_user_caja: JSON.parse(row.PerUserCaja || "[]"),
-            expenses: JSON.parse(row.ExpenseBreakdown || "[]")
+            total_caja: row.total_caja || 0,
+            total_ingresos: row.total_ingresos || 0,
+            product_sales: JSON.parse(row.product_sales || "[]"),
+            egresos_totales: row.egresos_totales || 0,
+            per_user_summary: JSON.parse(row.per_user_summary || "[]")
         });
     });
 });
+
 
 
 // Populate the database with test data
