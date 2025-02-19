@@ -585,19 +585,10 @@ app.patch("/update-product-status/:id", (req, res) => {
 app.get("/report", (req, res) => {
     let { range, UserID } = req.query;
 
-    // Calculate date range based on "range" parameter
-    let dateFilter;
-    const today = new Date();
-    const todayStr = today.toISOString().split("T")[0]; // YYYY-MM-DD
+    // Get date range based on "range" parameter
+    const { startDate, endDate } = getDateRange(range);
 
-    if (range === "today") {
-        dateFilter = `DATE(Fecha) = '${todayStr}'`;
-    } else if (range === "week") {
-        dateFilter = `DATE(Fecha) >= DATE('${todayStr}', 'weekday 0', '-6 days') 
-                      AND DATE(Fecha) <= DATE('${todayStr}', 'weekday 0')`;
-    } else if (range === "month") {
-        dateFilter = `strftime('%Y-%m', Fecha) = strftime('%Y-%m', '${todayStr}')`;
-    } else {
+    if (!startDate || !endDate) {
         return res.status(400).json({ error: "Invalid range. Use 'today', 'week', or 'month'." });
     }
 
@@ -612,7 +603,7 @@ app.get("/report", (req, res) => {
             FROM InventarioTable I
             JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
             JOIN TransacTable T ON I.TransacID = T.TransacID
-            WHERE ${dateFilter}
+            WHERE strftime('%Y-%m-%d', T.Fecha) BETWEEN ? AND ?
             AND (? IS NULL OR T.UserID = ?)  
             GROUP BY I.Srvc_Prod_ID
         ),
@@ -621,7 +612,7 @@ app.get("/report", (req, res) => {
                 Class, 
                 SUM(Valor) AS TotalEgresos
             FROM Egresos
-            WHERE ${dateFilter}
+            WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
             AND (? IS NULL OR UserID = ?)  
             GROUP BY Class
         ),
@@ -629,7 +620,7 @@ app.get("/report", (req, res) => {
             SELECT 
                 EgresoID, UserID, FechaAct, Class, Descript, Valor
             FROM Egresos
-            WHERE ${dateFilter}
+            WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
             AND (? IS NULL OR UserID = ?)  
         ),
         DetailedTransactions AS (
@@ -639,7 +630,7 @@ app.get("/report", (req, res) => {
                 T.Lat_Long, T.Fecha
             FROM TransacTable T
             JOIN UserTable U ON T.UserID = U.UserID
-            WHERE ${dateFilter}
+            WHERE strftime('%Y-%m-%d', T.Fecha) BETWEEN ? AND ?
             AND (? IS NULL OR T.UserID = ?)  
         )
         SELECT * FROM SalesSummary
@@ -650,7 +641,12 @@ app.get("/report", (req, res) => {
         UNION ALL
         SELECT * FROM DetailedTransactions;`;
 
-    const params = [UserID || null, UserID || null, UserID || null, UserID || null, UserID || null, UserID || null];
+    const params = [
+        startDate, endDate, UserID || null, UserID || null, // SalesSummary
+        startDate, endDate, UserID || null, UserID || null, // EgresosSummary
+        startDate, endDate, UserID || null, UserID || null, // DetailedEgresos
+        startDate, endDate, UserID || null, UserID || null  // DetailedTransactions
+    ];
 
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -659,7 +655,7 @@ app.get("/report", (req, res) => {
     });
 });
 
-// Helper function to get date ranges
+// Helper function to get the date range
 const getDateRange = (rangeType) => {
     const today = new Date();
     let startDate, endDate;
@@ -667,14 +663,15 @@ const getDateRange = (rangeType) => {
     if (rangeType === "today") {
         startDate = endDate = today.toISOString().split("T")[0]; // YYYY-MM-DD
     } else if (rangeType === "week") {
-        const firstDayOfWeek = new Date(today.setDate(today.getDate() - today.getDay())); // Start of the week (Sunday)
+        const firstDayOfWeek = new Date(today);
+        firstDayOfWeek.setDate(today.getDate() - 6); // Last 7 days
         startDate = firstDayOfWeek.toISOString().split("T")[0];
-        endDate = new Date().toISOString().split("T")[0]; // Today
+        endDate = today.toISOString().split("T")[0]; // Today
     } else if (rangeType === "month") {
         startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split("T")[0]; // First day of the month
-        endDate = new Date().toISOString().split("T")[0]; // Today
+        endDate = today.toISOString().split("T")[0]; // Today
     } else {
-        throw new Error("Invalid range type");
+        return { startDate: null, endDate: null };
     }
 
     return { startDate, endDate };
