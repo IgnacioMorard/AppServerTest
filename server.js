@@ -853,15 +853,22 @@ app.put("/clients/:id", (req, res) => {
     });
 });
 
-// 📌 DELETE: Remove a client
-app.delete("/clients/:id", (req, res) => {
+app.put("/clients/:id", (req, res) => {
     const clientId = req.params.id;
+    const { Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo } = req.body;
 
-    db.run("DELETE FROM ClientTable WHERE ClientID = ?", [clientId], function(err) {
+    const sql = `
+        UPDATE ClientTable 
+        SET Descript = ?, NombreRef = ?, DNIRef = ?, Nro_WSP = ?, Correo = ?, 
+            Ref_Address = ?, Last_Lat_Long = ?, Saldo = ?, FechaModif = CURRENT_TIMESTAMP 
+        WHERE ClientID = ?`;
+
+    db.run(sql, [Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo, clientId], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Client deleted successfully", changes: this.changes });
+        res.json({ message: "Client updated successfully", changes: this.changes });
     });
 });
+
 
 // Populate the database with test data
 app.post("/populate-test-data", (req, res) => {
