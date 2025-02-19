@@ -601,7 +601,7 @@ app.get("/report", (req, res) => {
         TransactionSummary AS (
             SELECT 
                 U.UserID,
-                U.Nombre AS UserName, 
+                U.Nombre AS User_Name,  -- 👈 Renamed
                 SUM(T.Pago_EFE) AS TotalEfectivo,
                 SUM(T.Pago_MP) AS TotalMP,
                 SUM(T.Pago_EFE) + SUM(T.Pago_MP) AS TotalIngresos
@@ -620,7 +620,7 @@ app.get("/report", (req, res) => {
         EgresoSummary AS (
             SELECT 
                 U.UserID,
-                U.Nombre AS UserName,
+                U.Nombre AS User_Name,  -- 👈 Renamed
                 SUM(E.Valor) AS TotalEgresos
             FROM FilteredEgresos E
             JOIN UserTable U ON U.UserID = E.UserID
@@ -662,7 +662,7 @@ app.get("/report", (req, res) => {
         -- 8️⃣ Detailed Expenses Per User
         DetailedExpenses AS (
             SELECT DISTINCT 
-                U.Nombre AS UserName,
+                U.Nombre AS User_Name,  -- 👈 Renamed
                 E.Class,
                 E.Descript,
                 E.Valor,
@@ -683,7 +683,7 @@ app.get("/report", (req, res) => {
         -- 🔟 Merge User Data
         PerUserSummary AS (
             SELECT 
-                TS.UserName,
+                TS.User_Name,  -- 👈 Renamed
                 COALESCE(TS.TotalEfectivo, 0) - COALESCE(ES.TotalEgresos, 0) AS UserCaja,
                 COALESCE(TS.TotalIngresos, 0) - COALESCE(ES.TotalEgresos, 0) AS UserIngresos,
                 json_group_array(json_object('ProductName', S.ProductName, 'TotalSold', S.TotalSold)) AS UserProductSales,
@@ -700,9 +700,9 @@ app.get("/report", (req, res) => {
             (SELECT TotalIngresos FROM GeneralSummary) AS total_ingresos,
             json_group_array(json_object('ProductName', ProductName, 'TotalSold', TotalSold)) AS product_sales,
             (SELECT COALESCE(SUM(TotalEgresos), 0) FROM EgresoSummary) AS egresos_totales,
-            json_group_array(json_object('UserName', UserName, 'UserCaja', UserCaja, 'UserIngresos', UserIngresos, 'UserProductSales', UserProductSales, 'UserEgresos', UserEgresos)) AS per_user_summary,
+            json_group_array(json_object('User_Name', User_Name, 'UserCaja', UserCaja, 'UserIngresos', UserIngresos, 'UserProductSales', UserProductSales, 'UserEgresos', UserEgresos)) AS per_user_summary,
             json_group_array(json_object('Category', ExpenseCategory, 'TotalSpent', TotalSpent)) AS expenses_breakdown,
-            json_group_array(json_object('UserName', UserName, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS detailed_expenses
+            json_group_array(json_object('User_Name', User_Name, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS detailed_expenses
         FROM TotalProductSales, PerUserSummary, ExpensesBreakdown, DetailedExpenses;
     `;
 
@@ -723,10 +723,6 @@ app.get("/report", (req, res) => {
         });
     });
 });
-
-
-
-
 
 // Helper function to get the date range
 const getDateRange = (rangeType) => {
