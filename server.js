@@ -720,146 +720,81 @@ app.get("/inventory-summary", (req, res) => {
     });
 });
 
+app.get("/consolidated-report", (req, res) => {
+    let { startDate, endDate, UserID } = req.query;
 
-app.get("/report", (req, res) => {
-    let { range } = req.query;
-    const { startDate, endDate } = getDateRange(range);
-
+    // Default to today if no date range is provided
     if (!startDate || !endDate) {
-        return res.status(400).json({ error: "Invalid range. Use 'today', 'week', or 'month'." });
+        const today = new Date().toISOString().split('T')[0];
+        startDate = endDate = today;
     }
 
     const sql = `
-        -- 1️⃣ Filter Transactions by Date
-        WITH FilteredTransactions AS (
-            SELECT * FROM TransacTable
-            WHERE strftime('%Y-%m-%d', Fecha) BETWEEN ? AND ?
-        ),
-
-        -- 2️⃣ Compute Per-User Transactions
-        TransactionSummary AS (
-            SELECT 
-                U.UserID,
-                U.Nombre AS User_Name,  -- 👈 Renamed
-                SUM(T.Pago_EFE) AS TotalEfectivo,
-                SUM(T.Pago_MP) AS TotalMP,
-                SUM(T.Pago_EFE) + SUM(T.Pago_MP) AS TotalIngresos
-            FROM FilteredTransactions T
-            JOIN UserTable U ON U.UserID = T.UserID
-            GROUP BY U.UserID
-        ),
-
-        -- 3️⃣ Filter Expenses by Date
-        FilteredEgresos AS (
-            SELECT * FROM Egresos
-            WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
-        ),
-
-        -- 4️⃣ Compute Per-User Expenses
-        EgresoSummary AS (
-            SELECT 
-                U.UserID,
-                U.Nombre AS User_Name,  -- 👈 Renamed
-                SUM(E.Valor) AS TotalEgresos
-            FROM FilteredEgresos E
-            JOIN UserTable U ON U.UserID = E.UserID
-            GROUP BY U.UserID
-        ),
-
-        -- 5️⃣ Join Inventory with Transactions to Count Sales by User
-        SalesSummary AS (
+        WITH TransactionsSummary AS (
             SELECT 
                 T.UserID,
+                U.Nombre AS UserName,
+                DATE(T.Fecha) AS TransactionDate,
+                SUM(T.Pago_EFE) AS TotalEfectivo,
+                SUM(T.Pago_MP) AS TotalMP,
+                SUM(T.Pago_BOT) AS TotalBOT,
+                SUM(T.Valor) AS TotalIngresos
+            FROM TransacTable T
+            JOIN UserTable U ON T.UserID = U.UserID
+            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+            ${UserID ? "AND T.UserID = ?" : ""}
+            GROUP BY T.UserID, TransactionDate
+        ),
+        ExpensesSummary AS (
+            SELECT 
+                E.UserID,
+                U.Nombre AS UserName,
+                DATE(E.FechaAct) AS ExpenseDate,
+                SUM(E.Valor) AS TotalEgresos
+            FROM Egresos E
+            JOIN UserTable U ON E.UserID = U.UserID
+            WHERE DATE(E.FechaAct) BETWEEN ? AND ?
+            ${UserID ? "AND E.UserID = ?" : ""}
+            GROUP BY E.UserID, ExpenseDate
+        ),
+        InventorySummary AS (
+            SELECT 
+                T.UserID,
+                U.Nombre AS UserName,
+                DATE(T.Fecha) AS InventoryDate,
                 P.Descript AS ProductName,
                 SUM(I.Amount) AS TotalSold
             FROM InventarioTable I
-            JOIN FilteredTransactions T ON I.TransacID = T.TransacID
+            JOIN TransacTable T ON I.TransacID = T.TransacID
             JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            GROUP BY T.UserID, P.Srvc_Prod_ID
-        ),
-
-        -- 6️⃣ Overall Product Sales
-        TotalProductSales AS (
-            SELECT 
-                P.Descript AS ProductName,
-                SUM(I.Amount) AS TotalSold
-            FROM InventarioTable I
-            JOIN FilteredTransactions T ON I.TransacID = T.TransacID
-            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            GROUP BY P.Srvc_Prod_ID
-        ),
-
-        -- 7️⃣ Expense Breakdown
-        ExpensesBreakdown AS (
-            SELECT 
-                Class AS ExpenseCategory,
-                SUM(Valor) AS TotalSpent
-            FROM FilteredEgresos
-            GROUP BY Class
-        ),
-
-        -- 8️⃣ Detailed Expenses Per User
-        DetailedExpenses AS (
-            SELECT DISTINCT 
-                U.Nombre AS User_Name,  -- 👈 Renamed
-                E.Class,
-                E.Descript,
-                E.Valor,
-                E.FechaAct
-            FROM FilteredEgresos E
-            JOIN UserTable U ON U.UserID = E.UserID
-        ),
-
-        -- 9️⃣ Compute Total Caja & Total Ingresos
-        GeneralSummary AS (
-            SELECT 
-                COALESCE(SUM(TS.TotalEfectivo), 0) - COALESCE(SUM(ES.TotalEgresos), 0) AS TotalCaja,
-                COALESCE(SUM(TS.TotalIngresos), 0) - COALESCE(SUM(ES.TotalEgresos), 0) AS TotalIngresos
-            FROM TransactionSummary TS
-            LEFT JOIN EgresoSummary ES USING(UserID)
-        ),
-
-        -- 🔟 Merge User Data
-        PerUserSummary AS (
-            SELECT 
-                TS.User_Name,  -- 👈 Renamed
-                COALESCE(TS.TotalEfectivo, 0) - COALESCE(ES.TotalEgresos, 0) AS UserCaja,
-                COALESCE(TS.TotalIngresos, 0) - COALESCE(ES.TotalEgresos, 0) AS UserIngresos,
-                json_group_array(json_object('ProductName', S.ProductName, 'TotalSold', S.TotalSold)) AS UserProductSales,
-                COALESCE(ES.TotalEgresos, 0) AS UserEgresos
-            FROM TransactionSummary TS
-            LEFT JOIN EgresoSummary ES USING(UserID)
-            LEFT JOIN SalesSummary S USING(UserID)
-            GROUP BY TS.UserID
+            JOIN UserTable U ON T.UserID = U.UserID
+            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+            ${UserID ? "AND T.UserID = ?" : ""}
+            GROUP BY T.UserID, InventoryDate, P.Srvc_Prod_ID
         )
-
-        -- 🔥 Final JSON Output
         SELECT 
-            (SELECT TotalCaja FROM GeneralSummary) AS total_caja,
-            (SELECT TotalIngresos FROM GeneralSummary) AS total_ingresos,
-            json_group_array(json_object('ProductName', ProductName, 'TotalSold', TotalSold)) AS product_sales,
-            (SELECT COALESCE(SUM(TotalEgresos), 0) FROM EgresoSummary) AS egresos_totales,
-            json_group_array(json_object('User_Name', User_Name, 'UserCaja', UserCaja, 'UserIngresos', UserIngresos, 'UserProductSales', UserProductSales, 'UserEgresos', UserEgresos)) AS per_user_summary,
-            json_group_array(json_object('Category', ExpenseCategory, 'TotalSpent', TotalSpent)) AS expenses_breakdown,
-            json_group_array(json_object('User_Name', User_Name, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS detailed_expenses
-        FROM TotalProductSales, PerUserSummary, ExpensesBreakdown, DetailedExpenses;
+            COALESCE(TS.UserID, ES.UserID) AS UserID,
+            COALESCE(TS.UserName, ES.UserName) AS UserName,
+            COALESCE(TS.TransactionDate, ES.ExpenseDate) AS Date,
+            COALESCE(TS.TotalEfectivo, 0) AS TotalEfectivo,
+            COALESCE(TS.TotalMP, 0) AS TotalMP,
+            COALESCE(TS.TotalBOT, 0) AS TotalBOT,
+            COALESCE(TS.TotalIngresos, 0) AS TotalIngresos,
+            COALESCE(ES.TotalEgresos, 0) AS TotalEgresos,
+            (COALESCE(TS.TotalEfectivo, 0) - COALESCE(ES.TotalEgresos, 0)) AS CajaTotal
+        FROM TransactionsSummary TS
+        FULL OUTER JOIN ExpensesSummary ES ON TS.UserID = ES.UserID AND TS.TransactionDate = ES.ExpenseDate
+        ORDER BY Date DESC;
     `;
 
-    const params = [startDate, endDate, startDate, endDate];
+    const params = UserID 
+        ? [startDate, endDate, UserID, startDate, endDate, UserID, startDate, endDate, UserID] 
+        : [startDate, endDate, startDate, endDate, startDate, endDate];
 
-    db.get(sql, params, (err, row) => {
+    db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        res.json({
-            time_range: range,
-            total_caja: row.total_caja || 0,
-            total_ingresos: row.total_ingresos || 0,
-            product_sales: JSON.parse(row.product_sales || "[]"),
-            egresos_totales: row.egresos_totales || 0,
-            per_user_summary: JSON.parse(row.per_user_summary || "[]"),
-            expenses_breakdown: JSON.parse(row.expenses_breakdown || "[]"),
-            detailed_expenses: JSON.parse(row.detailed_expenses || "[]")
-        });
+        res.json(rows);
     });
 });
 
