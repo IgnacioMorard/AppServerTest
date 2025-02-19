@@ -604,7 +604,7 @@ app.get("/report", (req, res) => {
         ),
         CajaPerUser AS (
             SELECT 
-                U.Nombre AS UserName, 
+                U.Nombre AS UserName,  -- Explicitly referencing UserTable.Nombre
                 COALESCE(SUM(T.Pago_EFE), 0) AS CajaUser
             FROM FilteredTransactions T
             JOIN UserTable U ON T.UserID = U.UserID
@@ -630,7 +630,7 @@ app.get("/report", (req, res) => {
         ),
         DetailedExpenses AS (
             SELECT 
-                U.Nombre AS UserName, 
+                U.Nombre AS UserName,  -- Explicitly referencing UserTable.Nombre
                 E.Class, 
                 E.Descript, 
                 E.Valor, 
@@ -641,9 +641,9 @@ app.get("/report", (req, res) => {
         SELECT 
             (SELECT TotalProductsSold FROM TotalSales) AS TotalProductsSold,
             (SELECT CajaTotal FROM CajaSummary) AS CajaTotal,
-            json_group_array(json_object('UserName', UserName, 'CajaUser', CajaUser)) AS CajaPerUser,
-            json_group_array(json_object('Category', Category, 'TotalSpent', TotalSpent)) AS ExpenseBreakdown,
-            json_group_array(json_object('UserName', UserName, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS DetailedExpenses
+            json_group_array(json_object('UserName', CajaPerUser.UserName, 'CajaUser', CajaPerUser.CajaUser)) AS CajaPerUser,
+            json_group_array(json_object('Category', ExpenseBreakdown.Category, 'TotalSpent', ExpenseBreakdown.TotalSpent)) AS ExpenseBreakdown,
+            json_group_array(json_object('UserName', DetailedExpenses.UserName, 'Class', DetailedExpenses.Class, 'Descript', DetailedExpenses.Descript, 'Valor', DetailedExpenses.Valor, 'FechaAct', DetailedExpenses.FechaAct)) AS DetailedExpenses
         FROM CajaPerUser, ExpenseBreakdown, DetailedExpenses;
     `;
 
