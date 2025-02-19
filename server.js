@@ -591,60 +591,62 @@ app.get("/report", (req, res) => {
     }
 
     const sql = `
-        -- 1️⃣ Filtered Transactions & Group by User
+        -- 1️⃣ Filter Transactions & Group by User
         WITH FilteredTransactions AS (
             SELECT * FROM TransacTable
             WHERE strftime('%Y-%m-%d', Fecha) BETWEEN ? AND ?
         ),
         TransactionSummary AS (
             SELECT 
-                UserID,
-                SUM(Pago_EFE) AS TotalEfectivo,
-                SUM(Pago_MP) AS TotalMP,
-                SUM(Pago_EFE) + SUM(Pago_MP) AS TotalIngresos
+                UserTable.Nombre AS UserName, 
+                UserTable.UserID,
+                SUM(FilteredTransactions.Pago_EFE) AS TotalEfectivo,
+                SUM(FilteredTransactions.Pago_MP) AS TotalMP,
+                SUM(FilteredTransactions.Pago_EFE) + SUM(FilteredTransactions.Pago_MP) AS TotalIngresos
             FROM FilteredTransactions
-            GROUP BY UserID
+            JOIN UserTable ON UserTable.UserID = FilteredTransactions.UserID
+            GROUP BY UserTable.UserID
         ),
-        
-        -- 2️⃣ Filtered Expenses & Group by User
+
+        -- 2️⃣ Filter Egresos & Group by User
         FilteredEgresos AS (
             SELECT * FROM Egresos
             WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
         ),
         EgresoSummary AS (
             SELECT 
-                UserID,
-                SUM(Valor) AS TotalEgresos
+                UserTable.Nombre AS UserName, 
+                UserTable.UserID,
+                SUM(FilteredEgresos.Valor) AS TotalEgresos
             FROM FilteredEgresos
-            GROUP BY UserID
+            JOIN UserTable ON UserTable.UserID = FilteredEgresos.UserID
+            GROUP BY UserTable.UserID
         ),
-        
+
         -- 3️⃣ Join Inventory with Transactions to Count Sales by User
         SalesSummary AS (
             SELECT 
-                T.UserID,
-                I.Srvc_Prod_ID,
-                P.Descript AS ProductName,
-                SUM(I.Amount) AS TotalSold
-            FROM InventarioTable I
-            JOIN FilteredTransactions T ON I.TransacID = T.TransacID
-            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            GROUP BY T.UserID, I.Srvc_Prod_ID
+                FilteredTransactions.UserID,
+                Srvc_ProdTable.Descript AS ProductName,
+                SUM(InventarioTable.Amount) AS TotalSold
+            FROM InventarioTable
+            JOIN FilteredTransactions ON InventarioTable.TransacID = FilteredTransactions.TransacID
+            JOIN Srvc_ProdTable ON InventarioTable.Srvc_Prod_ID = Srvc_ProdTable.Srvc_Prod_ID
+            GROUP BY FilteredTransactions.UserID, Srvc_ProdTable.Srvc_Prod_ID
         ),
 
-        -- 4️⃣ Overall Product Sales (Grouped by Product)
+        -- 4️⃣ Overall Product Sales
         TotalProductSales AS (
             SELECT 
-                I.Srvc_Prod_ID,
-                P.Descript AS ProductName,
-                SUM(I.Amount) AS TotalSold
-            FROM InventarioTable I
-            JOIN FilteredTransactions T ON I.TransacID = T.TransacID
-            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            GROUP BY I.Srvc_Prod_ID
+                Srvc_ProdTable.Descript AS ProductName,
+                SUM(InventarioTable.Amount) AS TotalSold
+            FROM InventarioTable
+            JOIN FilteredTransactions ON InventarioTable.TransacID = FilteredTransactions.TransacID
+            JOIN Srvc_ProdTable ON InventarioTable.Srvc_Prod_ID = Srvc_ProdTable.Srvc_Prod_ID
+            GROUP BY Srvc_ProdTable.Srvc_Prod_ID
         ),
 
-        -- 5️⃣ Expense Breakdown (Grouped by Category)
+        -- 5️⃣ Expense Breakdown
         ExpensesBreakdown AS (
             SELECT 
                 Class AS ExpenseCategory,
@@ -655,41 +657,40 @@ app.get("/report", (req, res) => {
 
         -- 6️⃣ Detailed Expenses Per User
         DetailedExpenses AS (
-            SELECT 
-                U.Nombre AS UserName,
-                E.Class,
-                E.Descript,
-                E.Valor,
-                E.FechaAct
-            FROM FilteredEgresos E
-            JOIN UserTable U ON E.UserID = U.UserID
+            SELECT DISTINCT 
+                UserTable.Nombre AS UserName,
+                FilteredEgresos.Class,
+                FilteredEgresos.Descript,
+                FilteredEgresos.Valor,
+                FilteredEgresos.FechaAct
+            FROM FilteredEgresos
+            JOIN UserTable ON UserTable.UserID = FilteredEgresos.UserID
         ),
 
         -- 7️⃣ Compute Total Caja and Total Ingresos
         GeneralSummary AS (
             SELECT 
-                COALESCE(SUM(TotalEfectivo), 0) - COALESCE(SUM(TotalEgresos), 0) AS TotalCaja,
-                COALESCE(SUM(TotalIngresos), 0) - COALESCE(SUM(TotalEgresos), 0) AS TotalIngresos
+                COALESCE(SUM(TransactionSummary.TotalEfectivo), 0) - COALESCE(SUM(EgresoSummary.TotalEgresos), 0) AS TotalCaja,
+                COALESCE(SUM(TransactionSummary.TotalIngresos), 0) - COALESCE(SUM(EgresoSummary.TotalEgresos), 0) AS TotalIngresos
             FROM TransactionSummary
             LEFT JOIN EgresoSummary USING(UserID)
         ),
 
-        -- 8️⃣ Merge User Data with Transactions & Egresos
+        -- 8️⃣ Merge User Data
         PerUserSummary AS (
             SELECT 
-                U.Nombre AS UserName,
-                COALESCE(TS.TotalEfectivo, 0) - COALESCE(ES.TotalEgresos, 0) AS UserCaja,
-                COALESCE(TS.TotalIngresos, 0) - COALESCE(ES.TotalEgresos, 0) AS UserIngresos,
-                json_group_array(json_object('ProductName', S.ProductName, 'TotalSold', S.TotalSold)) AS UserProductSales,
-                COALESCE(ES.TotalEgresos, 0) AS UserEgresos
-            FROM UserTable U
-            LEFT JOIN TransactionSummary TS ON U.UserID = TS.UserID
-            LEFT JOIN EgresoSummary ES ON U.UserID = ES.UserID
-            LEFT JOIN SalesSummary S ON U.UserID = S.UserID
-            GROUP BY U.UserID
+                TransactionSummary.UserName,
+                COALESCE(TransactionSummary.TotalEfectivo, 0) - COALESCE(EgresoSummary.TotalEgresos, 0) AS UserCaja,
+                COALESCE(TransactionSummary.TotalIngresos, 0) - COALESCE(EgresoSummary.TotalEgresos, 0) AS UserIngresos,
+                json_group_array(json_object('ProductName', SalesSummary.ProductName, 'TotalSold', SalesSummary.TotalSold)) AS UserProductSales,
+                COALESCE(EgresoSummary.TotalEgresos, 0) AS UserEgresos
+            FROM TransactionSummary
+            LEFT JOIN EgresoSummary USING(UserID)
+            LEFT JOIN SalesSummary USING(UserID)
+            GROUP BY TransactionSummary.UserID
         )
 
-        -- 9️⃣ Final Select to Fetch Results
+        -- 9️⃣ Final JSON Output
         SELECT 
             (SELECT TotalCaja FROM GeneralSummary) AS total_caja,
             (SELECT TotalIngresos FROM GeneralSummary) AS total_ingresos,
@@ -718,6 +719,7 @@ app.get("/report", (req, res) => {
         });
     });
 });
+
 
 
 
