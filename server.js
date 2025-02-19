@@ -688,6 +688,38 @@ app.get("/inventory", (req, res) => {
     });
 });
 
+app.get("/inventory-summary", (req, res) => {
+    let { startDate, endDate, UserID } = req.query;
+
+    if (!startDate || !endDate) {
+        const today = new Date().toISOString().split('T')[0]; // Default: Today
+        startDate = endDate = today;
+    }
+
+    const sql = `
+        SELECT 
+            P.Descript AS ProductName,
+            SUM(I.Amount) AS TotalAmount
+        FROM InventarioTable I
+        JOIN TransacTable T ON I.TransacID = T.TransacID
+        JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
+        WHERE DATE(T.Fecha) BETWEEN ? AND ?
+        ${UserID ? "AND T.UserID = ?" : ""}
+        GROUP BY P.Srvc_Prod_ID
+        ORDER BY TotalAmount DESC;
+    `;
+
+    const params = UserID ? [startDate, endDate, UserID] : [startDate, endDate];
+
+    db.all(sql, params, (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        res.json(rows);
+    });
+});
+
 
 app.get("/report", (req, res) => {
     let { range } = req.query;
