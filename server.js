@@ -792,6 +792,24 @@ function fetchData(endpoint) {
     });
 }
 
+app.get("/users", (req, res) => {
+    const sql = `
+        SELECT UserID, Nombre
+        FROM UserTable
+        WHERE STATUS = 'Active'
+        ORDER BY Nombre ASC;
+    `;
+
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        res.json(rows);
+    });
+});
+
+
 // Populate the database with test data
 app.post("/populate-test-data", (req, res) => {
     db.serialize(() => {
