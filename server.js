@@ -720,237 +720,64 @@ app.get("/inventory-summary", (req, res) => {
     });
 });
 
-app.get("/full-consolidated-report", (req, res) => {
+app.get("/consolidated-report", async (req, res) => {
     let { startDate, endDate, UserID } = req.query;
 
     if (!startDate || !endDate) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toISOString().split("T")[0]; // Default to today
         startDate = endDate = today;
     }
 
-    const params = UserID ? [startDate, endDate, UserID] : [startDate, endDate];
+    try {
+        // Fetch transactions
+        const transactions = await fetchData(`/transactions?startDate=${startDate}&endDate=${endDate}${UserID ? `&UserID=${UserID}` : ""}`);
 
-    // Summary SQL: Totals per User
-    const summarySQL = `
-        WITH TransactionsSummary AS (
-            SELECT 
-                T.UserID,
-                U.Nombre AS UserName,
-                SUM(T.Pago_EFE) AS TotalEfectivo,
-                SUM(T.Pago_MP) AS TotalMP,
-                SUM(T.Pago_BOT) AS TotalBOT,
-                SUM(T.Valor) AS TotalIngresos
-            FROM TransacTable T
-            JOIN UserTable U ON T.UserID = U.UserID
-            WHERE DATE(T.Fecha) BETWEEN ? AND ?
-            ${UserID ? "AND T.UserID = ?" : ""}
-            GROUP BY T.UserID
-        ),
-        ExpensesSummary AS (
-            SELECT 
-                E.UserID,
-                U.Nombre AS UserName,
-                SUM(E.Valor) AS TotalEgresos
-            FROM Egresos E
-            JOIN UserTable U ON E.UserID = U.UserID
-            WHERE DATE(E.FechaAct) BETWEEN ? AND ?
-            ${UserID ? "AND E.UserID = ?" : ""}
-            GROUP BY E.UserID
-        )
-        SELECT 
-            COALESCE(TS.UserID, ES.UserID) AS UserID,
-            COALESCE(TS.UserName, ES.UserName) AS UserName,
-            COALESCE(TS.TotalEfectivo, 0) AS TotalEfectivo,
-            COALESCE(TS.TotalMP, 0) AS TotalMP,
-            COALESCE(TS.TotalBOT, 0) AS TotalBOT,
-            COALESCE(TS.TotalIngresos, 0) AS TotalIngresos,
-            COALESCE(ES.TotalEgresos, 0) AS TotalEgresos,
-            (COALESCE(TS.TotalEfectivo, 0) - COALESCE(ES.TotalEgresos, 0)) AS CajaTotal
-        FROM TransactionsSummary TS
-        FULL OUTER JOIN ExpensesSummary ES ON TS.UserID = ES.UserID;
-    `;
+        // Fetch expenses
+        const expenses = await fetchData(`/expenses?startDate=${startDate}&endDate=${endDate}${UserID ? `&UserID=${UserID}` : ""}`);
 
-    // Transactions SQL: Group items per transaction
-    const transactionsSQL = `
-        SELECT 
-            T.TransacID,
-            T.Fecha,
-            U.Nombre AS UserName,
-            C.Descript AS ClientName,
-            T.Pago_EFE,
-            T.Pago_MP,
-            T.Pago_BOT,
-            T.Deuda,
-            T.Valor,
-            json_group_array(
-                json_object(
-                    'ProductName', P.Descript,
-                    'Amount', I.Amount,
-                    'Costo', I.Costo,
-                    'TotalCost', I.Amount * I.Costo
-                )
-            ) AS Products
-        FROM TransacTable T
-        JOIN UserTable U ON T.UserID = U.UserID
-        JOIN ClientTable C ON T.ClientID = C.ClientID
-        JOIN InventarioTable I ON T.TransacID = I.TransacID
-        JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-        WHERE DATE(T.Fecha) BETWEEN ? AND ?
-        ${UserID ? "AND T.UserID = ?" : ""}
-        GROUP BY T.TransacID
-        ORDER BY T.Fecha DESC;
-    `;
+        // Fetch inventory
+        const inventory = await fetchData(`/inventory?startDate=${startDate}&endDate=${endDate}${UserID ? `&UserID=${UserID}` : ""}`);
 
-    // Expenses SQL: Full details
-    const expensesSQL = `
-        SELECT 
-            E.EgresoID,
-            E.FechaAct,
-            U.Nombre AS UserName,
-            E.Class,
-            E.Descript,
-            E.Valor
-        FROM Egresos E
-        JOIN UserTable U ON E.UserID = U.UserID
-        WHERE DATE(E.FechaAct) BETWEEN ? AND ?
-        ${UserID ? "AND E.UserID = ?" : ""}
-        ORDER BY E.FechaAct DESC;
-    `;
-
-    db.all(summarySQL, params.concat(params), (err, summaryRows) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        db.all(transactionsSQL, params, (err, transactionsRows) => {
-            if (err) return res.status(500).json({ error: err.message });
-
-            // Parse JSON Product Array from SQLite
-            transactionsRows.forEach(t => {
-                t.Products = JSON.parse(t.Products);
-            });
-
-            db.all(expensesSQL, params, (err, expensesRows) => {
-                if (err) return res.status(500).json({ error: err.message });
-
-                res.json({
-                    summary: summaryRows,
-                    transactions: transactionsRows,
-                    expenses: expensesRows
-                });
-            });
+        // Group transactions by TransacID (Merge items inside transactions)
+        let transactionsWithItems = transactions.map(transaction => {
+            let relatedItems = inventory.filter(item => item.TransacID === transaction.TransacID);
+            return { ...transaction, Items: relatedItems };
         });
-    });
+
+        // Compute Total Caja (Pago_EFE - Total Egresos)
+        let totalPagoEFE = transactions.reduce((sum, t) => sum + t.Pago_EFE, 0);
+        let totalEgresos = expenses.reduce((sum, e) => sum + e.Valor, 0);
+        let cajaTotal = totalPagoEFE - totalEgresos;
+
+        // Compute Total Win (Total Transaction Valor - Total Expenses)
+        let totalTransactionValor = transactions.reduce((sum, t) => sum + t.Valor, 0);
+        let totalWin = totalTransactionValor - totalEgresos;
+
+        // Construct response
+        let consolidatedData = {
+            time_range: { startDate, endDate },
+            caja_total: cajaTotal,
+            total_win: totalWin,
+            transactions: transactionsWithItems,
+            expenses: expenses
+        };
+
+        res.json(consolidatedData);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
-// Helper function to get the date range
-const getDateRange = (rangeType) => {
-    const today = new Date();
-    let startDate, endDate;
-
-    if (rangeType === "today") {
-        startDate = endDate = today.toISOString().split("T")[0]; // YYYY-MM-DD
-    } else if (rangeType === "week") {
-        const firstDayOfWeek = new Date(today);
-        firstDayOfWeek.setDate(today.getDate() - 6); // Last 7 days
-        startDate = firstDayOfWeek.toISOString().split("T")[0];
-        endDate = today.toISOString().split("T")[0]; // Today
-    } else if (rangeType === "month") {
-        startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split("T")[0]; // First day of the month
-        endDate = today.toISOString().split("T")[0]; // Today
-    } else {
-        return { startDate: null, endDate: null };
-    }
-
-    return { startDate, endDate };
-};
-
-app.get("/report", (req, res) => {
-    let { range } = req.query;
-    const { startDate, endDate } = getDateRange(range);
-
-    if (!startDate || !endDate) {
-        return res.status(400).json({ error: "Invalid range. Use 'today', 'week', or 'month'." });
-    }
-
-    const sql = `
-        WITH FilteredTransactions AS (
-            SELECT * FROM TransacTable
-            WHERE strftime('%Y-%m-%d', Fecha) BETWEEN ? AND ?
-        ),
-        FilteredEgresos AS (
-            SELECT * FROM Egresos
-            WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
-        ),
-        TotalSummary AS (
-            SELECT 
-                COALESCE(SUM(T.Pago_EFE), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS total_caja,
-                COALESCE(SUM(T.Pago_EFE), 0) + COALESCE(SUM(T.Pago_MP), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS total_ingresos,
-                json_group_array(DISTINCT json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS product_sales,
-                COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS egresos_totales
-            FROM FilteredTransactions T
-            LEFT JOIN InventarioTable I ON T.TransacID = I.TransacID
-            LEFT JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-        ),
-        UserSummary AS (
-            SELECT 
-                U.Nombre AS UserName,
-                COALESCE(SUM(T.Pago_EFE), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_caja,
-                COALESCE(SUM(T.Pago_EFE), 0) + COALESCE(SUM(T.Pago_MP), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_ingresos,
-                json_group_array(json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS user_product_sales,
-                COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_egresos
-            FROM FilteredTransactions T
-            JOIN UserTable U ON T.UserID = U.UserID
-            LEFT JOIN InventarioTable I ON T.TransacID = I.TransacID
-            LEFT JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            GROUP BY U.UserID
-        ),
-        ExpensesBreakdown AS (
-            SELECT 
-                Class AS ExpenseCategory,
-                SUM(Valor) AS TotalSpent
-            FROM FilteredEgresos
-            GROUP BY Class
-        ),
-        DetailedExpenses AS (
-            SELECT DISTINCT 
-                U.Nombre AS UserName,
-                E.Class,
-                E.Descript,
-                E.Valor,
-                E.FechaAct
-            FROM FilteredEgresos E
-            JOIN UserTable U ON E.UserID = U.UserID
-        )
-        SELECT 
-            (SELECT total_caja FROM TotalSummary) AS total_caja,
-            (SELECT total_ingresos FROM TotalSummary) AS total_ingresos,
-            (SELECT product_sales FROM TotalSummary) AS product_sales,
-            (SELECT egresos_totales FROM TotalSummary) AS egresos_totales,
-            json_group_array(DISTINCT json_object('UserName', UserName, 'UserCaja', user_caja, 'UserIngresos', user_ingresos, 'UserProductSales', user_product_sales, 'UserEgresos', user_egresos)) AS per_user_summary,
-            json_group_array(DISTINCT json_object('Category', ExpenseCategory, 'TotalSpent', TotalSpent)) AS expenses_breakdown,
-            json_group_array(DISTINCT json_object('UserName', UserName, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS detailed_expenses
-        FROM UserSummary, ExpensesBreakdown, DetailedExpenses;
-    `;
-
-    const params = [startDate, endDate, startDate, endDate];
-
-    db.get(sql, params, (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        res.json({
-            time_range: range,
-            total_caja: row.total_caja || 0,
-            total_ingresos: row.total_ingresos || 0,
-            product_sales: JSON.parse(row.product_sales || "[]"),
-            egresos_totales: row.egresos_totales || 0,
-            per_user_summary: JSON.parse(row.per_user_summary || "[]"),
-            expenses_breakdown: JSON.parse(row.expenses_breakdown || "[]"),
-            detailed_expenses: JSON.parse(row.detailed_expenses || "[]")
-        });
+// Helper function to fetch from internal APIs
+function fetchData(endpoint) {
+    return new Promise((resolve, reject) => {
+        const url = `https://appservertest.onrender.com${endpoint}`; // Ensure the correct port
+        fetch(url)
+            .then(res => res.json())
+            .then(data => resolve(data))
+            .catch(err => reject(err));
     });
-});
-
-
-
+}
 
 
 // Populate the database with test data
