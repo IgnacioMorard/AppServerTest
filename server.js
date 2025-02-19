@@ -584,67 +584,121 @@ app.patch("/update-product-status/:id", (req, res) => {
 
 app.get("/report", (req, res) => {
     let { range } = req.query;
-
-    // Get date range based on "range" parameter
     const { startDate, endDate } = getDateRange(range);
 
     if (!startDate || !endDate) {
         return res.status(400).json({ error: "Invalid range. Use 'today', 'week', or 'month'." });
     }
 
-    // SQL Query
     const sql = `
+        -- 1️⃣ Filtered Transactions & Group by User
         WITH FilteredTransactions AS (
             SELECT * FROM TransacTable
             WHERE strftime('%Y-%m-%d', Fecha) BETWEEN ? AND ?
         ),
+        TransactionSummary AS (
+            SELECT 
+                UserID,
+                SUM(Pago_EFE) AS TotalEfectivo,
+                SUM(Pago_MP) AS TotalMP,
+                SUM(Pago_EFE) + SUM(Pago_MP) AS TotalIngresos
+            FROM FilteredTransactions
+            GROUP BY UserID
+        ),
+        
+        -- 2️⃣ Filtered Expenses & Group by User
         FilteredEgresos AS (
             SELECT * FROM Egresos
             WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
         ),
-        CajaPerUser AS (
+        EgresoSummary AS (
             SELECT 
-                U.Nombre AS UserName,  -- Explicitly referencing UserTable.Nombre
-                COALESCE(SUM(T.Pago_EFE), 0) AS CajaUser
-            FROM FilteredTransactions T
-            JOIN UserTable U ON T.UserID = U.UserID
-            GROUP BY T.UserID
+                UserID,
+                SUM(Valor) AS TotalEgresos
+            FROM FilteredEgresos
+            GROUP BY UserID
         ),
-        TotalSales AS (
-            SELECT SUM(I.Amount) AS TotalProductsSold
+        
+        -- 3️⃣ Join Inventory with Transactions to Count Sales by User
+        SalesSummary AS (
+            SELECT 
+                T.UserID,
+                I.Srvc_Prod_ID,
+                P.Descript AS ProductName,
+                SUM(I.Amount) AS TotalSold
             FROM InventarioTable I
             JOIN FilteredTransactions T ON I.TransacID = T.TransacID
+            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
+            GROUP BY T.UserID, I.Srvc_Prod_ID
         ),
-        CajaSummary AS (
+
+        -- 4️⃣ Overall Product Sales (Grouped by Product)
+        TotalProductSales AS (
             SELECT 
-                COALESCE(SUM(T.Pago_EFE), 0) - COALESCE(SUM(E.Valor), 0) AS CajaTotal
-            FROM FilteredTransactions T
-            LEFT JOIN FilteredEgresos E ON 1=1
+                I.Srvc_Prod_ID,
+                P.Descript AS ProductName,
+                SUM(I.Amount) AS TotalSold
+            FROM InventarioTable I
+            JOIN FilteredTransactions T ON I.TransacID = T.TransacID
+            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
+            GROUP BY I.Srvc_Prod_ID
         ),
-        ExpenseBreakdown AS (
+
+        -- 5️⃣ Expense Breakdown (Grouped by Category)
+        ExpensesBreakdown AS (
             SELECT 
-                Class AS Category, 
-                COALESCE(SUM(Valor), 0) AS TotalSpent
+                Class AS ExpenseCategory,
+                SUM(Valor) AS TotalSpent
             FROM FilteredEgresos
             GROUP BY Class
         ),
+
+        -- 6️⃣ Detailed Expenses Per User
         DetailedExpenses AS (
             SELECT 
-                U.Nombre AS UserName,  -- Explicitly referencing UserTable.Nombre
-                E.Class, 
-                E.Descript, 
-                E.Valor, 
+                U.Nombre AS UserName,
+                E.Class,
+                E.Descript,
+                E.Valor,
                 E.FechaAct
             FROM FilteredEgresos E
             JOIN UserTable U ON E.UserID = U.UserID
+        ),
+
+        -- 7️⃣ Compute Total Caja and Total Ingresos
+        GeneralSummary AS (
+            SELECT 
+                COALESCE(SUM(TotalEfectivo), 0) - COALESCE(SUM(TotalEgresos), 0) AS TotalCaja,
+                COALESCE(SUM(TotalIngresos), 0) - COALESCE(SUM(TotalEgresos), 0) AS TotalIngresos
+            FROM TransactionSummary
+            LEFT JOIN EgresoSummary USING(UserID)
+        ),
+
+        -- 8️⃣ Merge User Data with Transactions & Egresos
+        PerUserSummary AS (
+            SELECT 
+                U.Nombre AS UserName,
+                COALESCE(TS.TotalEfectivo, 0) - COALESCE(ES.TotalEgresos, 0) AS UserCaja,
+                COALESCE(TS.TotalIngresos, 0) - COALESCE(ES.TotalEgresos, 0) AS UserIngresos,
+                json_group_array(json_object('ProductName', S.ProductName, 'TotalSold', S.TotalSold)) AS UserProductSales,
+                COALESCE(ES.TotalEgresos, 0) AS UserEgresos
+            FROM UserTable U
+            LEFT JOIN TransactionSummary TS ON U.UserID = TS.UserID
+            LEFT JOIN EgresoSummary ES ON U.UserID = ES.UserID
+            LEFT JOIN SalesSummary S ON U.UserID = S.UserID
+            GROUP BY U.UserID
         )
+
+        -- 9️⃣ Final Select to Fetch Results
         SELECT 
-            (SELECT TotalProductsSold FROM TotalSales) AS TotalProductsSold,
-            (SELECT CajaTotal FROM CajaSummary) AS CajaTotal,
-            json_group_array(json_object('UserName', CajaPerUser.UserName, 'CajaUser', CajaPerUser.CajaUser)) AS CajaPerUser,
-            json_group_array(json_object('Category', ExpenseBreakdown.Category, 'TotalSpent', ExpenseBreakdown.TotalSpent)) AS ExpenseBreakdown,
-            json_group_array(json_object('UserName', DetailedExpenses.UserName, 'Class', DetailedExpenses.Class, 'Descript', DetailedExpenses.Descript, 'Valor', DetailedExpenses.Valor, 'FechaAct', DetailedExpenses.FechaAct)) AS DetailedExpenses
-        FROM CajaPerUser, ExpenseBreakdown, DetailedExpenses;
+            (SELECT TotalCaja FROM GeneralSummary) AS total_caja,
+            (SELECT TotalIngresos FROM GeneralSummary) AS total_ingresos,
+            json_group_array(json_object('ProductName', ProductName, 'TotalSold', TotalSold)) AS product_sales,
+            (SELECT COALESCE(SUM(TotalEgresos), 0) FROM EgresoSummary) AS egresos_totales,
+            json_group_array(json_object('UserName', UserName, 'UserCaja', UserCaja, 'UserIngresos', UserIngresos, 'UserProductSales', UserProductSales, 'UserEgresos', UserEgresos)) AS per_user_summary,
+            json_group_array(json_object('Category', ExpenseCategory, 'TotalSpent', TotalSpent)) AS expenses_breakdown,
+            json_group_array(json_object('UserName', UserName, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS detailed_expenses
+        FROM TotalProductSales, PerUserSummary, ExpensesBreakdown, DetailedExpenses;
     `;
 
     const params = [startDate, endDate, startDate, endDate];
@@ -654,11 +708,13 @@ app.get("/report", (req, res) => {
 
         res.json({
             time_range: range,
-            total_products_sold: row.TotalProductsSold || 0,
-            caja: row.CajaTotal || 0,
-            caja_per_user: JSON.parse(row.CajaPerUser || "[]"),
-            expenses_breakdown: JSON.parse(row.ExpenseBreakdown || "[]"),
-            detailed_expenses: JSON.parse(row.DetailedExpenses || "[]")
+            total_caja: row.total_caja || 0,
+            total_ingresos: row.total_ingresos || 0,
+            product_sales: JSON.parse(row.product_sales || "[]"),
+            egresos_totales: row.egresos_totales || 0,
+            per_user_summary: JSON.parse(row.per_user_summary || "[]"),
+            expenses_breakdown: JSON.parse(row.expenses_breakdown || "[]"),
+            detailed_expenses: JSON.parse(row.detailed_expenses || "[]")
         });
     });
 });
