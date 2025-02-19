@@ -583,7 +583,7 @@ app.patch("/update-product-status/:id", (req, res) => {
 });
 
 app.get("/report", (req, res) => {
-    let { range, UserID } = req.query;
+    let { range } = req.query;
 
     // Get date range based on "range" parameter
     const { startDate, endDate } = getDateRange(range);
@@ -594,71 +594,75 @@ app.get("/report", (req, res) => {
 
     // SQL Query
     const sql = `
-        WITH SalesSummary AS (
-            SELECT 
-                I.Srvc_Prod_ID, 
-                P.Descript AS ProductName, 
-                SUM(I.Amount) AS TotalSold, 
-                SUM(I.Amount * I.Costo) AS TotalRevenue,
-                NULL AS Class, NULL AS TotalEgresos, NULL AS EgresoID, NULL AS UserID, NULL AS FechaAct, NULL AS Descript, NULL AS Valor,
-                NULL AS TransacID, NULL AS ClientID, NULL AS UserName, NULL AS Pago_EFE, NULL AS Pago_MP, NULL AS Pago_BOT, NULL AS Deuda, NULL AS Lat_Long, NULL AS Fecha
-            FROM InventarioTable I
-            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            JOIN TransacTable T ON I.TransacID = T.TransacID
-            WHERE strftime('%Y-%m-%d', T.Fecha) BETWEEN ? AND ?
-            AND (? IS NULL OR T.UserID = ?)  
-            GROUP BY I.Srvc_Prod_ID
+        WITH FilteredTransactions AS (
+            SELECT * FROM TransacTable
+            WHERE strftime('%Y-%m-%d', Fecha) BETWEEN ? AND ?
         ),
-        EgresosSummary AS (
-            SELECT 
-                NULL AS Srvc_Prod_ID, NULL AS ProductName, NULL AS TotalSold, NULL AS TotalRevenue,
-                Class, SUM(Valor) AS TotalEgresos, NULL AS EgresoID, NULL AS UserID, NULL AS FechaAct, NULL AS Descript, NULL AS Valor,
-                NULL AS TransacID, NULL AS ClientID, NULL AS UserName, NULL AS Pago_EFE, NULL AS Pago_MP, NULL AS Pago_BOT, NULL AS Deuda, NULL AS Lat_Long, NULL AS Fecha
-            FROM Egresos
+        FilteredEgresos AS (
+            SELECT * FROM Egresos
             WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
-            AND (? IS NULL OR UserID = ?)  
+        ),
+        CajaPerUser AS (
+            SELECT 
+                U.Nombre AS UserName, 
+                COALESCE(SUM(T.Pago_EFE), 0) AS CajaUser
+            FROM FilteredTransactions T
+            JOIN UserTable U ON T.UserID = U.UserID
+            GROUP BY T.UserID
+        ),
+        TotalSales AS (
+            SELECT SUM(I.Amount) AS TotalProductsSold
+            FROM InventarioTable I
+            JOIN FilteredTransactions T ON I.TransacID = T.TransacID
+        ),
+        CajaSummary AS (
+            SELECT 
+                COALESCE(SUM(T.Pago_EFE), 0) - COALESCE(SUM(E.Valor), 0) AS CajaTotal
+            FROM FilteredTransactions T
+            LEFT JOIN FilteredEgresos E ON 1=1
+        ),
+        ExpenseBreakdown AS (
+            SELECT 
+                Class AS Category, 
+                COALESCE(SUM(Valor), 0) AS TotalSpent
+            FROM FilteredEgresos
             GROUP BY Class
         ),
-        DetailedEgresos AS (
+        DetailedExpenses AS (
             SELECT 
-                NULL AS Srvc_Prod_ID, NULL AS ProductName, NULL AS TotalSold, NULL AS TotalRevenue,
-                Class, NULL AS TotalEgresos, EgresoID, UserID, FechaAct, Descript, Valor,
-                NULL AS TransacID, NULL AS ClientID, NULL AS UserName, NULL AS Pago_EFE, NULL AS Pago_MP, NULL AS Pago_BOT, NULL AS Deuda, NULL AS Lat_Long, NULL AS Fecha
-            FROM Egresos
-            WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
-            AND (? IS NULL OR UserID = ?)  
-        ),
-        DetailedTransactions AS (
-            SELECT 
-                NULL AS Srvc_Prod_ID, NULL AS ProductName, NULL AS TotalSold, NULL AS TotalRevenue,
-                NULL AS Class, NULL AS TotalEgresos, NULL AS EgresoID, NULL AS UserID, NULL AS FechaAct, NULL AS Descript, NULL AS Valor,
-                T.TransacID, T.ClientID, U.Nombre AS UserName, T.Pago_EFE, T.Pago_MP, T.Pago_BOT, T.Deuda, T.Lat_Long, T.Fecha
-            FROM TransacTable T
-            JOIN UserTable U ON T.UserID = U.UserID
-            WHERE strftime('%Y-%m-%d', T.Fecha) BETWEEN ? AND ?
-            AND (? IS NULL OR T.UserID = ?)  
+                U.Nombre AS UserName, 
+                E.Class, 
+                E.Descript, 
+                E.Valor, 
+                E.FechaAct
+            FROM FilteredEgresos E
+            JOIN UserTable U ON E.UserID = U.UserID
         )
-        SELECT * FROM SalesSummary
-        UNION ALL
-        SELECT * FROM EgresosSummary
-        UNION ALL
-        SELECT * FROM DetailedEgresos
-        UNION ALL
-        SELECT * FROM DetailedTransactions;`;
+        SELECT 
+            (SELECT TotalProductsSold FROM TotalSales) AS TotalProductsSold,
+            (SELECT CajaTotal FROM CajaSummary) AS CajaTotal,
+            json_group_array(json_object('UserName', UserName, 'CajaUser', CajaUser)) AS CajaPerUser,
+            json_group_array(json_object('Category', Category, 'TotalSpent', TotalSpent)) AS ExpenseBreakdown,
+            json_group_array(json_object('UserName', UserName, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS DetailedExpenses
+        FROM CajaPerUser, ExpenseBreakdown, DetailedExpenses;
+    `;
 
-    const params = [
-        startDate, endDate, UserID || null, UserID || null, // SalesSummary
-        startDate, endDate, UserID || null, UserID || null, // EgresosSummary
-        startDate, endDate, UserID || null, UserID || null, // DetailedEgresos
-        startDate, endDate, UserID || null, UserID || null  // DetailedTransactions
-    ];
+    const params = [startDate, endDate, startDate, endDate];
 
-    db.all(sql, params, (err, rows) => {
+    db.get(sql, params, (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        res.json(rows);
+        res.json({
+            time_range: range,
+            total_products_sold: row.TotalProductsSold || 0,
+            caja: row.CajaTotal || 0,
+            caja_per_user: JSON.parse(row.CajaPerUser || "[]"),
+            expenses_breakdown: JSON.parse(row.ExpenseBreakdown || "[]"),
+            detailed_expenses: JSON.parse(row.DetailedExpenses || "[]")
+        });
     });
 });
+
 
 
 // Helper function to get the date range
