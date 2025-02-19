@@ -809,6 +809,59 @@ app.get("/users", (req, res) => {
     });
 });
 
+app.put("/clients/:id/status", (req, res) => {
+    const clientId = req.params.id;
+    const { STATUS } = req.body;
+
+    if (!["Active", "Inactive"].includes(STATUS)) {
+        return res.status(400).json({ error: "Invalid status. Use 'Active' or 'Inactive'." });
+    }
+
+    const sql = `UPDATE ClientTable SET STATUS = ?, FechaModif = CURRENT_TIMESTAMP WHERE ClientID = ?`;
+
+    db.run(sql, [STATUS, clientId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: `Client status updated to ${STATUS}`, changes: this.changes });
+    });
+});
+
+// 📌 GET: Fetch all clients
+app.get("/clients", (req, res) => {
+    db.all("SELECT * FROM ClientTable ORDER BY Descript ASC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// 📌 PUT: Update client details
+app.put("/clients/:id", (req, res) => {
+    const clientId = req.params.id;
+    const { Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo, STATUS, Last_Modif_By } = req.body;
+
+    const sql = `
+        UPDATE ClientTable 
+        SET Descript = ?, NombreRef = ?, DNIRef = ?, Nro_WSP = ?, Correo = ?, Ref_Address = ?, 
+            Last_Lat_Long = ?, FechaModif = CURRENT_TIMESTAMP, Saldo = ?, STATUS = ?, Last_Modif_By = ?
+        WHERE ClientID = ?
+    `;
+
+    const params = [Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo, STATUS, Last_Modif_By, clientId];
+
+    db.run(sql, params, function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Client updated successfully", changes: this.changes });
+    });
+});
+
+// 📌 DELETE: Remove a client
+app.delete("/clients/:id", (req, res) => {
+    const clientId = req.params.id;
+
+    db.run("DELETE FROM ClientTable WHERE ClientID = ?", [clientId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Client deleted successfully", changes: this.changes });
+    });
+});
 
 // Populate the database with test data
 app.post("/populate-test-data", (req, res) => {
