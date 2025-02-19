@@ -599,7 +599,9 @@ app.get("/report", (req, res) => {
                 I.Srvc_Prod_ID, 
                 P.Descript AS ProductName, 
                 SUM(I.Amount) AS TotalSold, 
-                SUM(I.Amount * I.Costo) AS TotalRevenue
+                SUM(I.Amount * I.Costo) AS TotalRevenue,
+                NULL AS Class, NULL AS TotalEgresos, NULL AS EgresoID, NULL AS UserID, NULL AS FechaAct, NULL AS Descript, NULL AS Valor,
+                NULL AS TransacID, NULL AS ClientID, NULL AS UserName, NULL AS Pago_EFE, NULL AS Pago_MP, NULL AS Pago_BOT, NULL AS Deuda, NULL AS Lat_Long, NULL AS Fecha
             FROM InventarioTable I
             JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
             JOIN TransacTable T ON I.TransacID = T.TransacID
@@ -609,8 +611,9 @@ app.get("/report", (req, res) => {
         ),
         EgresosSummary AS (
             SELECT 
-                Class, 
-                SUM(Valor) AS TotalEgresos
+                NULL AS Srvc_Prod_ID, NULL AS ProductName, NULL AS TotalSold, NULL AS TotalRevenue,
+                Class, SUM(Valor) AS TotalEgresos, NULL AS EgresoID, NULL AS UserID, NULL AS FechaAct, NULL AS Descript, NULL AS Valor,
+                NULL AS TransacID, NULL AS ClientID, NULL AS UserName, NULL AS Pago_EFE, NULL AS Pago_MP, NULL AS Pago_BOT, NULL AS Deuda, NULL AS Lat_Long, NULL AS Fecha
             FROM Egresos
             WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
             AND (? IS NULL OR UserID = ?)  
@@ -618,16 +621,18 @@ app.get("/report", (req, res) => {
         ),
         DetailedEgresos AS (
             SELECT 
-                EgresoID, UserID, FechaAct, Class, Descript, Valor
+                NULL AS Srvc_Prod_ID, NULL AS ProductName, NULL AS TotalSold, NULL AS TotalRevenue,
+                Class, NULL AS TotalEgresos, EgresoID, UserID, FechaAct, Descript, Valor,
+                NULL AS TransacID, NULL AS ClientID, NULL AS UserName, NULL AS Pago_EFE, NULL AS Pago_MP, NULL AS Pago_BOT, NULL AS Deuda, NULL AS Lat_Long, NULL AS Fecha
             FROM Egresos
             WHERE strftime('%Y-%m-%d', FechaAct) BETWEEN ? AND ?
             AND (? IS NULL OR UserID = ?)  
         ),
         DetailedTransactions AS (
             SELECT 
-                T.TransacID, T.ClientID, T.UserID, U.Nombre AS UserName, 
-                T.Valor, T.Pago_EFE, T.Pago_MP, T.Pago_BOT, T.Deuda, 
-                T.Lat_Long, T.Fecha
+                NULL AS Srvc_Prod_ID, NULL AS ProductName, NULL AS TotalSold, NULL AS TotalRevenue,
+                NULL AS Class, NULL AS TotalEgresos, NULL AS EgresoID, NULL AS UserID, NULL AS FechaAct, NULL AS Descript, NULL AS Valor,
+                T.TransacID, T.ClientID, U.Nombre AS UserName, T.Pago_EFE, T.Pago_MP, T.Pago_BOT, T.Deuda, T.Lat_Long, T.Fecha
             FROM TransacTable T
             JOIN UserTable U ON T.UserID = U.UserID
             WHERE strftime('%Y-%m-%d', T.Fecha) BETWEEN ? AND ?
@@ -654,6 +659,7 @@ app.get("/report", (req, res) => {
         res.json(rows);
     });
 });
+
 
 // Helper function to get the date range
 const getDateRange = (rangeType) => {
