@@ -720,21 +720,22 @@ app.get("/inventory-summary", (req, res) => {
     });
 });
 
-app.get("/consolidated-report", (req, res) => {
+app.get("/full-consolidated-report", (req, res) => {
     let { startDate, endDate, UserID } = req.query;
 
-    // Default to today if no date range is provided
     if (!startDate || !endDate) {
         const today = new Date().toISOString().split('T')[0];
         startDate = endDate = today;
     }
 
-    const sql = `
+    const params = UserID ? [startDate, endDate, UserID] : [startDate, endDate];
+
+    // Summary SQL: Totals per User
+    const summarySQL = `
         WITH TransactionsSummary AS (
             SELECT 
                 T.UserID,
                 U.Nombre AS UserName,
-                DATE(T.Fecha) AS TransactionDate,
                 SUM(T.Pago_EFE) AS TotalEfectivo,
                 SUM(T.Pago_MP) AS TotalMP,
                 SUM(T.Pago_BOT) AS TotalBOT,
@@ -743,39 +744,22 @@ app.get("/consolidated-report", (req, res) => {
             JOIN UserTable U ON T.UserID = U.UserID
             WHERE DATE(T.Fecha) BETWEEN ? AND ?
             ${UserID ? "AND T.UserID = ?" : ""}
-            GROUP BY T.UserID, TransactionDate
+            GROUP BY T.UserID
         ),
         ExpensesSummary AS (
             SELECT 
                 E.UserID,
                 U.Nombre AS UserName,
-                DATE(E.FechaAct) AS ExpenseDate,
                 SUM(E.Valor) AS TotalEgresos
             FROM Egresos E
             JOIN UserTable U ON E.UserID = U.UserID
             WHERE DATE(E.FechaAct) BETWEEN ? AND ?
             ${UserID ? "AND E.UserID = ?" : ""}
-            GROUP BY E.UserID, ExpenseDate
-        ),
-        InventorySummary AS (
-            SELECT 
-                T.UserID,
-                U.Nombre AS UserName,
-                DATE(T.Fecha) AS InventoryDate,
-                P.Descript AS ProductName,
-                SUM(I.Amount) AS TotalSold
-            FROM InventarioTable I
-            JOIN TransacTable T ON I.TransacID = T.TransacID
-            JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
-            JOIN UserTable U ON T.UserID = U.UserID
-            WHERE DATE(T.Fecha) BETWEEN ? AND ?
-            ${UserID ? "AND T.UserID = ?" : ""}
-            GROUP BY T.UserID, InventoryDate, P.Srvc_Prod_ID
+            GROUP BY E.UserID
         )
         SELECT 
             COALESCE(TS.UserID, ES.UserID) AS UserID,
             COALESCE(TS.UserName, ES.UserName) AS UserName,
-            COALESCE(TS.TransactionDate, ES.ExpenseDate) AS Date,
             COALESCE(TS.TotalEfectivo, 0) AS TotalEfectivo,
             COALESCE(TS.TotalMP, 0) AS TotalMP,
             COALESCE(TS.TotalBOT, 0) AS TotalBOT,
@@ -783,18 +767,77 @@ app.get("/consolidated-report", (req, res) => {
             COALESCE(ES.TotalEgresos, 0) AS TotalEgresos,
             (COALESCE(TS.TotalEfectivo, 0) - COALESCE(ES.TotalEgresos, 0)) AS CajaTotal
         FROM TransactionsSummary TS
-        FULL OUTER JOIN ExpensesSummary ES ON TS.UserID = ES.UserID AND TS.TransactionDate = ES.ExpenseDate
-        ORDER BY Date DESC;
+        FULL OUTER JOIN ExpensesSummary ES ON TS.UserID = ES.UserID;
     `;
 
-    const params = UserID 
-        ? [startDate, endDate, UserID, startDate, endDate, UserID, startDate, endDate, UserID] 
-        : [startDate, endDate, startDate, endDate, startDate, endDate];
+    // Transactions SQL: Group items per transaction
+    const transactionsSQL = `
+        SELECT 
+            T.TransacID,
+            T.Fecha,
+            U.Nombre AS UserName,
+            C.Descript AS ClientName,
+            T.Pago_EFE,
+            T.Pago_MP,
+            T.Pago_BOT,
+            T.Deuda,
+            T.Valor,
+            json_group_array(
+                json_object(
+                    'ProductName', P.Descript,
+                    'Amount', I.Amount,
+                    'Costo', I.Costo,
+                    'TotalCost', I.Amount * I.Costo
+                )
+            ) AS Products
+        FROM TransacTable T
+        JOIN UserTable U ON T.UserID = U.UserID
+        JOIN ClientTable C ON T.ClientID = C.ClientID
+        JOIN InventarioTable I ON T.TransacID = I.TransacID
+        JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
+        WHERE DATE(T.Fecha) BETWEEN ? AND ?
+        ${UserID ? "AND T.UserID = ?" : ""}
+        GROUP BY T.TransacID
+        ORDER BY T.Fecha DESC;
+    `;
 
-    db.all(sql, params, (err, rows) => {
+    // Expenses SQL: Full details
+    const expensesSQL = `
+        SELECT 
+            E.EgresoID,
+            E.FechaAct,
+            U.Nombre AS UserName,
+            E.Class,
+            E.Descript,
+            E.Valor
+        FROM Egresos E
+        JOIN UserTable U ON E.UserID = U.UserID
+        WHERE DATE(E.FechaAct) BETWEEN ? AND ?
+        ${UserID ? "AND E.UserID = ?" : ""}
+        ORDER BY E.FechaAct DESC;
+    `;
+
+    db.all(summarySQL, params.concat(params), (err, summaryRows) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        res.json(rows);
+        db.all(transactionsSQL, params, (err, transactionsRows) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Parse JSON Product Array from SQLite
+            transactionsRows.forEach(t => {
+                t.Products = JSON.parse(t.Products);
+            });
+
+            db.all(expensesSQL, params, (err, expensesRows) => {
+                if (err) return res.status(500).json({ error: err.message });
+
+                res.json({
+                    summary: summaryRows,
+                    transactions: transactionsRows,
+                    expenses: expensesRows
+                });
+            });
+        });
     });
 });
 
