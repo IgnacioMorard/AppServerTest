@@ -617,6 +617,40 @@ app.get("/transactions", (req, res) => {
     });
 });
 
+app.get("/expenses", (req, res) => {
+    let { startDate, endDate, UserID } = req.query;
+
+    if (!startDate || !endDate) {
+        const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+        startDate = endDate = today; // Default to today's expenses
+    }
+
+    const sql = `
+        SELECT 
+            E.EgresoID,
+            U.Nombre AS UserName,  -- Fetching Nombre from UserTable
+            E.FechaAct,
+            E.Class,
+            E.Descript,
+            E.Valor
+        FROM Egresos E
+        JOIN UserTable U ON E.UserID = U.UserID
+        WHERE DATE(E.FechaAct) BETWEEN ? AND ?
+        ${UserID ? "AND E.UserID = ?" : ""}
+        ORDER BY E.FechaAct DESC;
+    `;
+
+    const params = UserID ? [startDate, endDate, UserID] : [startDate, endDate];
+
+    db.all(sql, params, (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        res.json(rows);
+    });
+});
+
 
 app.get("/report", (req, res) => {
     let { range } = req.query;
