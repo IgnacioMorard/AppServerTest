@@ -651,6 +651,43 @@ app.get("/expenses", (req, res) => {
     });
 });
 
+app.get("/inventory", (req, res) => {
+    let { startDate, endDate, UserID } = req.query;
+
+    if (!startDate || !endDate) {
+        const today = new Date().toISOString().split('T')[0]; // Default: Today
+        startDate = endDate = today;
+    }
+
+    const sql = `
+        SELECT 
+            I.TransacID,
+            T.Fecha,
+            U.Nombre AS UserName,
+            P.Descript AS ProductName,
+            I.Amount,
+            I.Costo,
+            (I.Amount * I.Costo) AS TotalCost
+        FROM InventarioTable I
+        JOIN TransacTable T ON I.TransacID = T.TransacID
+        JOIN UserTable U ON T.UserID = U.UserID
+        JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
+        WHERE DATE(T.Fecha) BETWEEN ? AND ?
+        ${UserID ? "AND T.UserID = ?" : ""}
+        ORDER BY T.Fecha DESC;
+    `;
+
+    const params = UserID ? [startDate, endDate, UserID] : [startDate, endDate];
+
+    db.all(sql, params, (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        res.json(rows);
+    });
+});
+
 
 app.get("/report", (req, res) => {
     let { range } = req.query;
