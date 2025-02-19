@@ -708,14 +708,12 @@ app.get("/report", (req, res) => {
             JOIN ClientTable C ON T.ClientID = C.ClientID
             WHERE DATE(T.Fecha) BETWEEN ? AND ?
         ),
-        InventorySummary AS (
+        InventoryData AS (
             SELECT 
                 I.TransacID,
                 SUM(I.Amount) AS TotalItems,
                 SUM(I.Amount * I.Costo) AS TotalCost
             FROM InventarioTable I
-            JOIN TransacTable T ON I.TransacID = T.TransacID
-            WHERE DATE(T.Fecha) BETWEEN ? AND ?
             GROUP BY I.TransacID
         ),
         ExpenseSummary AS (
@@ -735,13 +733,13 @@ app.get("/report", (req, res) => {
             TS.Pago_BOT,
             TS.Deuda,
             TS.Fecha,
-            COALESCE(IS.TotalItems, 0) AS TotalItems,
-            COALESCE(IS.TotalCost, 0) AS TotalCost,
+            COALESCE(ID.TotalItems, 0) AS TotalItems,
+            COALESCE(ID.TotalCost, 0) AS TotalCost,
             ES.TotalExpenses,
             ES.TotalEfectivo,
             ES.CajaTotal
         FROM TransactionSummary TS
-        LEFT JOIN InventorySummary IS ON TS.TransacID = IS.TransacID
+        LEFT JOIN InventoryData ID ON TS.TransacID = ID.TransacID
         CROSS JOIN ExpenseSummary ES;
     `;
 
