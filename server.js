@@ -729,7 +729,7 @@ app.get("/consolidated-report", async (req, res) => {
     }
 
     try {
-        // Fetch transactions
+        // Fetch transactions (Now includes Client Name)
         const transactions = await fetchData(`/transactions?startDate=${startDate}&endDate=${endDate}${UserID ? `&UserID=${UserID}` : ""}`);
 
         // Fetch expenses
@@ -738,10 +738,23 @@ app.get("/consolidated-report", async (req, res) => {
         // Fetch inventory
         const inventory = await fetchData(`/inventory?startDate=${startDate}&endDate=${endDate}${UserID ? `&UserID=${UserID}` : ""}`);
 
-        // Group transactions by TransacID (Merge items inside transactions)
+        // Fetch client names
+        const clients = await fetchData(`/clients`); // New API to fetch all clients
+
+        // Create a map of ClientID -> Client Name (`Descript`)
+        let clientMap = {};
+        clients.forEach(client => {
+            clientMap[client.ClientID] = client.Descript;
+        });
+
+        // Group transactions by TransacID and attach Client Name
         let transactionsWithItems = transactions.map(transaction => {
             let relatedItems = inventory.filter(item => item.TransacID === transaction.TransacID);
-            return { ...transaction, Items: relatedItems };
+            return {
+                ...transaction,
+                Items: relatedItems,
+                ClientName: clientMap[transaction.ClientID] || "Unknown Client" // Attach Client Name
+            };
         });
 
         // Compute Total Caja (Pago_EFE - Total Egresos)
@@ -758,7 +771,7 @@ app.get("/consolidated-report", async (req, res) => {
             time_range: { startDate, endDate },
             caja_total: cajaTotal,
             total_win: totalWin,
-            transactions: transactionsWithItems,
+            transactions: transactionsWithItems, // Now includes `ClientName`
             expenses: expenses
         };
 
@@ -771,14 +784,13 @@ app.get("/consolidated-report", async (req, res) => {
 // Helper function to fetch from internal APIs
 function fetchData(endpoint) {
     return new Promise((resolve, reject) => {
-        const url = `https://appservertest.onrender.com${endpoint}`; // Ensure the correct port
+        const url = `https://appservertest.onrender.com${endpoint}`;
         fetch(url)
             .then(res => res.json())
             .then(data => resolve(data))
             .catch(err => reject(err));
     });
 }
-
 
 // Populate the database with test data
 app.post("/populate-test-data", (req, res) => {
