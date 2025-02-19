@@ -708,7 +708,7 @@ app.get("/report", (req, res) => {
             SELECT 
                 COALESCE(SUM(T.Pago_EFE), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS total_caja,
                 COALESCE(SUM(T.Pago_EFE), 0) + COALESCE(SUM(T.Pago_MP), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS total_ingresos,
-                json_group_array(json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS product_sales,
+                json_group_array(DISTINCT json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS product_sales,
                 COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E), 0) AS egresos_totales
             FROM FilteredTransactions T
             LEFT JOIN InventarioTable I ON T.TransacID = I.TransacID
@@ -719,21 +719,40 @@ app.get("/report", (req, res) => {
                 U.Nombre AS UserName,
                 COALESCE(SUM(T.Pago_EFE), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_caja,
                 COALESCE(SUM(T.Pago_EFE), 0) + COALESCE(SUM(T.Pago_MP), 0) - COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_ingresos,
-                json_group_array(json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS user_product_sales,
+                json_group_array(DISTINCT json_object('ProductName', P.Descript, 'TotalSold', SUM(I.Amount))) AS user_product_sales,
                 COALESCE((SELECT SUM(E.Valor) FROM FilteredEgresos E WHERE E.UserID = U.UserID), 0) AS user_egresos
             FROM FilteredTransactions T
             JOIN UserTable U ON T.UserID = U.UserID
             LEFT JOIN InventarioTable I ON T.TransacID = I.TransacID
             LEFT JOIN Srvc_ProdTable P ON I.Srvc_Prod_ID = P.Srvc_Prod_ID
             GROUP BY U.UserID
+        ),
+        ExpensesBreakdown AS (
+            SELECT 
+                Class AS ExpenseCategory,
+                SUM(Valor) AS TotalSpent
+            FROM FilteredEgresos
+            GROUP BY Class
+        ),
+        DetailedExpenses AS (
+            SELECT 
+                U.Nombre AS UserName,
+                E.Class,
+                E.Descript,
+                E.Valor,
+                E.FechaAct
+            FROM FilteredEgresos E
+            JOIN UserTable U ON E.UserID = U.UserID
         )
         SELECT 
             (SELECT total_caja FROM TotalSummary) AS total_caja,
             (SELECT total_ingresos FROM TotalSummary) AS total_ingresos,
             (SELECT product_sales FROM TotalSummary) AS product_sales,
             (SELECT egresos_totales FROM TotalSummary) AS egresos_totales,
-            json_group_array(json_object('UserName', UserName, 'UserCaja', user_caja, 'UserIngresos', user_ingresos, 'UserProductSales', user_product_sales, 'UserEgresos', user_egresos)) AS per_user_summary
-        FROM UserSummary;
+            json_group_array(DISTINCT json_object('UserName', UserName, 'UserCaja', user_caja, 'UserIngresos', user_ingresos, 'UserProductSales', user_product_sales, 'UserEgresos', user_egresos)) AS per_user_summary,
+            json_group_array(json_object('Category', ExpenseCategory, 'TotalSpent', TotalSpent)) AS expenses_breakdown,
+            json_group_array(DISTINCT json_object('UserName', UserName, 'Class', Class, 'Descript', Descript, 'Valor', Valor, 'FechaAct', FechaAct)) AS detailed_expenses
+        FROM UserSummary, ExpensesBreakdown, DetailedExpenses;
     `;
 
     const params = [startDate, endDate, startDate, endDate];
@@ -747,10 +766,13 @@ app.get("/report", (req, res) => {
             total_ingresos: row.total_ingresos || 0,
             product_sales: JSON.parse(row.product_sales || "[]"),
             egresos_totales: row.egresos_totales || 0,
-            per_user_summary: JSON.parse(row.per_user_summary || "[]")
+            per_user_summary: JSON.parse(row.per_user_summary || "[]"),
+            expenses_breakdown: JSON.parse(row.expenses_breakdown || "[]"),
+            detailed_expenses: JSON.parse(row.detailed_expenses || "[]")
         });
     });
 });
+
 
 
 
