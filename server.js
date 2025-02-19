@@ -582,6 +582,42 @@ app.patch("/update-product-status/:id", (req, res) => {
     });
 });
 
+app.get("/transactions", (req, res) => {
+    let { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+        const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+        startDate = endDate = today; // Default to today's transactions
+    }
+
+    const sql = `
+        SELECT 
+            T.TransacID,
+            T.ClientID,
+            U.Nombre AS UserName,  -- Fetching Nombre from UserTable
+            T.Valor,
+            T.Pago_EFE,
+            T.Pago_MP,
+            T.Pago_BOT,
+            T.Deuda,
+            T.Lat_Long,
+            T.Fecha
+        FROM TransacTable T
+        JOIN UserTable U ON T.UserID = U.UserID
+        WHERE DATE(T.Fecha) BETWEEN ? AND ?
+        ORDER BY T.Fecha DESC;
+    `;
+
+    db.all(sql, [startDate, endDate], (err, rows) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+
+        res.json(rows);
+    });
+});
+
+
 app.get("/report", (req, res) => {
     let { range } = req.query;
     const { startDate, endDate } = getDateRange(range);
