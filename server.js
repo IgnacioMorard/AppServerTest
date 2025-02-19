@@ -659,6 +659,163 @@ app.get("/report", (req, res) => {
     });
 });
 
+// Helper function to get date ranges
+const getDateRange = (rangeType) => {
+    const today = new Date();
+    let startDate, endDate;
+
+    if (rangeType === "today") {
+        startDate = endDate = today.toISOString().split("T")[0]; // YYYY-MM-DD
+    } else if (rangeType === "week") {
+        const firstDayOfWeek = new Date(today.setDate(today.getDate() - today.getDay())); // Start of the week (Sunday)
+        startDate = firstDayOfWeek.toISOString().split("T")[0];
+        endDate = new Date().toISOString().split("T")[0]; // Today
+    } else if (rangeType === "month") {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split("T")[0]; // First day of the month
+        endDate = new Date().toISOString().split("T")[0]; // Today
+    } else {
+        throw new Error("Invalid range type");
+    }
+
+    return { startDate, endDate };
+};
+
+// Report generation endpoint
+app.get("/report", (req, res) => {
+    const { range } = req.query;
+
+    if (!["today", "week", "month"].includes(range)) {
+        return res.status(400).json({ error: "Invalid range. Use 'today', 'week', or 'month'." });
+    }
+
+    const { startDate, endDate } = getDateRange(range);
+
+    // SQL Query
+    const sql = `
+        WITH TransactionSummary AS (
+            SELECT 
+                T.TransacID,
+                U.Nombre AS UserName,
+                C.NombreRef AS ClientName,
+                T.Valor,
+                T.Pago_EFE,
+                T.Pago_MP,
+                T.Pago_BOT,
+                T.Deuda,
+                T.Fecha
+            FROM TransacTable T
+            JOIN UserTable U ON T.UserID = U.UserID
+            JOIN ClientTable C ON T.ClientID = C.ClientID
+            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+        ),
+        InventorySummary AS (
+            SELECT 
+                I.TransacID,
+                SUM(I.Amount) AS TotalItems,
+                SUM(I.Amount * I.Costo) AS TotalCost
+            FROM InventarioTable I
+            JOIN TransacTable T ON I.TransacID = T.TransacID
+            WHERE DATE(T.Fecha) BETWEEN ? AND ?
+            GROUP BY I.TransacID
+        ),
+        ExpenseSummary AS (
+            SELECT 
+                SUM(E.Valor) AS TotalExpenses,
+                (SELECT SUM(Pago_EFE) FROM TransacTable WHERE DATE(Fecha) BETWEEN ? AND ?) AS TotalEfectivo,
+                (SELECT SUM(Pago_EFE) FROM TransacTable WHERE DATE(Fecha) BETWEEN ? AND ?) - SUM(E.Valor) AS CajaTotal
+            FROM Egresos E
+            WHERE DATE(E.FechaAct) BETWEEN ? AND ?
+        )
+        SELECT 
+            TS.UserName,
+            TS.ClientName,
+            TS.Valor,
+            TS.Pago_EFE,
+            TS.Pago_MP,
+            TS.Pago_BOT,
+            TS.Deuda,
+            TS.Fecha,
+            COALESCE(IS.TotalItems, 0) AS TotalItems,
+            COALESCE(IS.TotalCost, 0) AS TotalCost,
+            ES.TotalExpenses,
+            ES.TotalEfectivo,
+            ES.CajaTotal
+        FROM TransactionSummary TS
+        LEFT JOIN InventorySummary IS ON TS.TransacID = IS.TransacID
+        CROSS JOIN ExpenseSummary ES;
+    `;
+
+    const params = [startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate];
+
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        res.json(rows);
+    });
+});
+
+// Populate the database with test data
+app.post("/populate-test-data", (req, res) => {
+    db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+
+        // Insert Users
+        db.run(`INSERT INTO UserTable (Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password) VALUES 
+                (1, 'admin', 'Juan Perez', '12345678', '555-1234', 'juan@example.com', 'pass123'),
+                (2, 'seller', 'Maria Gomez', '87654321', '555-5678', 'maria@example.com', 'pass456')`);
+
+        // Insert Clients
+        db.run(`INSERT INTO ClientTable (Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, FechaModif, Saldo, STATUS, Last_Modif_By) VALUES 
+                ('Regular Customer', 'Carlos Lopez', '99887766', '555-9999', 'carlos@example.com', 'Street 123', '-34.6037,-58.3816', DATETIME('now'), 0, 'Active', 1),
+                ('Business Client', 'Ana Martinez', '66778899', '555-8888', 'ana@example.com', 'Avenue 456', '-34.5987,-58.3852', DATETIME('now'), 0, 'Active', 2),
+                ('VIP Client', 'Luis Ramirez', '55443322', '555-7777', 'luis@example.com', 'Street 789', '-34.6020,-58.3800', DATETIME('now'), 0, 'Active', 1)`);
+
+        // Insert Products/Services
+        db.run(`INSERT INTO Srvc_ProdTable (Descript, Valor, UserID) VALUES 
+                ('Bidon 10L', 500, 1),
+                ('Bidon 20L', 1000, 2)`);
+
+        // Insert Transactions
+        db.run(`INSERT INTO TransacTable (ClientID, UserID, Valor, Pago_EFE, Pago_MP, Pago_BOT, Deuda, Lat_Long, Fecha) VALUES 
+                (1, 1, 5000, 2000, 2500, 500, 0, '-34.6037,-58.3816', DATETIME('now')),
+                (2, 2, 3000, 1000, 1000, 1000, 500, '-34.5987,-58.3852', DATETIME('now')),
+                (3, 1, 4000, 2000, 1000, 1000, 0, '-34.6030,-58.3820', DATETIME('now')),
+                (3, 2, 6000, 3000, 2000, 1000, 0, '-34.6000,-58.3840', DATETIME('now')),
+                (1, 1, 4500, 2500, 1500, 500, 0, '-34.6015,-58.3865', DATETIME('now')),
+                (2, 2, 5200, 2200, 2000, 1000, 0, '-34.6045,-58.3890', DATETIME('now')),
+                (3, 1, 3200, 1200, 1000, 1000, 0, '-34.6025,-58.3875', DATETIME('now')),
+                (1, 2, 4800, 2800, 1000, 1000, 0, '-34.6010,-58.3880', DATETIME('now')),
+                (2, 1, 5700, 2700, 2000, 1000, 0, '-34.6035,-58.3905', DATETIME('now')),
+                (3, 2, 6100, 3100, 2000, 1000, 0, '-34.6050,-58.3920', DATETIME('now'))`);
+
+        // Insert Inventory (Linked to Transactions)
+        db.run(`INSERT INTO InventarioTable (TransacID, Srvc_Prod_ID, Amount, Costo) VALUES 
+                (1, 1, 5, 500),
+                (1, 2, 2, 1000),
+                (2, 1, 3, 500),
+                (2, 2, 4, 1000),
+                (3, 1, 6, 500),
+                (3, 2, 1, 1000),
+                (4, 1, 8, 500),
+                (4, 2, 2, 1000),
+                (5, 1, 7, 500),
+                (5, 2, 3, 1000)`);
+
+        // Insert Expenses (Egresos)
+        db.run(`INSERT INTO Egresos (UserID, Class, Descript, Valor, FechaAct) VALUES 
+                (1, 'Combustible', 'Gas for delivery', 1200, DATETIME('now')),
+                (2, 'Mecanico', 'Truck repair', 1700, DATETIME('now')),
+                (1, 'Varios', 'Miscellaneous expenses', 800, DATETIME('now'))`);
+
+        db.run("COMMIT", (err) => {
+            if (err) {
+                db.run("ROLLBACK");
+                return res.status(500).json({ error: "Error inserting test data", details: err.message });
+            }
+            res.json({ message: "Test data inserted successfully!" });
+        });
+    });
+});
 
 
 // Start the server
