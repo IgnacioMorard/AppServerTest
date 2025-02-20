@@ -809,6 +809,20 @@ app.get("/users", (req, res) => {
     });
 });
 
+app.get("/user-management", (req, res) => {
+    const sql = `
+        SELECT UserID, Hierarchy, Username, Nombre, DNI, Telefono, Correo, STATUS
+        FROM UserTable
+        ORDER BY Nombre ASC
+    `;
+
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+
 app.put("/user-management/update/:id", (req, res) => {
     const { id } = req.params;
     const { Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password } = req.body;
