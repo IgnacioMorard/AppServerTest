@@ -906,6 +906,26 @@ app.put("/user-management/status/:id", (req, res) => {
     });
 });
 
+// Endpoint to update user password
+app.put("/user-management/password/:id", (req, res) => {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+    }
+
+    const sql = `UPDATE UserTable SET Password = ? WHERE UserID = ?`;
+
+    db.run(sql, [newPassword, id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "User not found" });
+
+        res.json({ message: "Password updated successfully" });
+    });
+});
+
+
 // Populate the database with test data
 app.post("/populate-test-data", (req, res) => {
     db.serialize(() => {
