@@ -811,7 +811,7 @@ app.get("/users", (req, res) => {
 
 app.get("/user-management", (req, res) => {
     const sql = `
-        SELECT UserID, Hierarchy, Username, Nombre, DNI, Telefono, Correo, STATUS
+        SELECT UserID, Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password
         FROM UserTable
         ORDER BY Nombre ASC
     `;
@@ -822,23 +822,22 @@ app.get("/user-management", (req, res) => {
     });
 });
 
-
 app.put("/user-management/update/:id", (req, res) => {
     const { id } = req.params;
     const { Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password } = req.body;
 
     const sql = `
         UPDATE UserTable 
-        SET Hierarchy = ?, Username = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Password = ?, Fecha_STATUS = CURRENT_TIMESTAMP
-        WHERE UserID = ?
-    `;
+        SET Hierarchy = ?, Username = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Password = ?
+        WHERE UserID = ?`;
 
     db.run(sql, [Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, id], function (err) {
         if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "User not found" });
+
         res.json({ message: "User updated successfully" });
     });
 });
-
 
 app.put("/clients/:id/status", (req, res) => {
     const clientId = req.params.id;
