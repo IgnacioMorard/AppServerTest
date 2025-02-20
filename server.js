@@ -878,24 +878,18 @@ app.get("/user-management", (req, res) => {
     });
 });
 
-// Endpoint to update user details (including password)
 app.put("/user-management/update/:id", (req, res) => {
-    const { id } = req.params;
-    const { Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, STATUS } = req.body;
+    const userId = req.params.id;
+    const { Hierarchy, Nombre, DNI, Telefono, Correo } = req.body;
 
-    const sql = `
-        UPDATE UserTable 
-        SET Hierarchy = ?, Username = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Password = ?, STATUS = ?, Fecha_STATUS = CURRENT_TIMESTAMP 
-        WHERE UserID = ?`;
+    const sql = `UPDATE UserTable SET Hierarchy = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Fecha_STATUS = CURRENT_TIMESTAMP WHERE UserID = ?`;
 
-    db.run(sql, [Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, STATUS, id], function (err) {
+    db.run(sql, [Hierarchy, Nombre, DNI, Telefono, Correo, userId], function (err) {
         if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ message: "User not found" });
 
         res.json({ message: "User updated successfully" });
     });
 });
-
 
 app.put("/user-management/status/:id", (req, res) => {
     const userId = req.params.id;
