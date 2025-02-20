@@ -869,6 +869,42 @@ app.put("/clients/:id", (req, res) => {
     });
 });
 
+app.get("/user-management", (req, res) => {
+    const sql = "SELECT UserID, Hierarchy, Username, Nombre, DNI, Telefono, Correo, STATUS FROM UserTable";
+
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.put("/user-management/update/:id", (req, res) => {
+    const userId = req.params.id;
+    const { Hierarchy, Nombre, DNI, Telefono, Correo } = req.body;
+
+    const sql = `UPDATE UserTable SET Hierarchy = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Fecha_STATUS = CURRENT_TIMESTAMP WHERE UserID = ?`;
+
+    db.run(sql, [Hierarchy, Nombre, DNI, Telefono, Correo, userId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+
+        res.json({ message: "User updated successfully" });
+    });
+});
+
+app.put("/user-management/status/:id", (req, res) => {
+    const userId = req.params.id;
+    const { STATUS } = req.body;
+
+    if (!STATUS) return res.status(400).json({ error: "STATUS field is required." });
+
+    const sql = `UPDATE UserTable SET STATUS = ?, Fecha_STATUS = CURRENT_TIMESTAMP WHERE UserID = ?`;
+
+    db.run(sql, [STATUS, userId], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+
+        res.json({ message: "User status updated successfully" });
+    });
+});
 
 // Populate the database with test data
 app.post("/populate-test-data", (req, res) => {
