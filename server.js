@@ -853,22 +853,6 @@ app.put("/clients/:id", (req, res) => {
     });
 });
 
-app.put("/clients/:id", (req, res) => {
-    const clientId = req.params.id;
-    const { Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo } = req.body;
-
-    const sql = `
-        UPDATE ClientTable 
-        SET Descript = ?, NombreRef = ?, DNIRef = ?, Nro_WSP = ?, Correo = ?, 
-            Ref_Address = ?, Last_Lat_Long = ?, Saldo = ?, FechaModif = CURRENT_TIMESTAMP 
-        WHERE ClientID = ?`;
-
-    db.run(sql, [Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, Saldo, clientId], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Client updated successfully", changes: this.changes });
-    });
-});
-
 app.get("/user-management", (req, res) => {
     const sql = "SELECT UserID, Hierarchy, Username, Nombre, DNI, Telefono, Correo, STATUS FROM UserTable";
 
@@ -878,14 +862,19 @@ app.get("/user-management", (req, res) => {
     });
 });
 
+// Endpoint to update user details (including password)
 app.put("/user-management/update/:id", (req, res) => {
-    const userId = req.params.id;
-    const { Hierarchy, Nombre, DNI, Telefono, Correo } = req.body;
+    const { id } = req.params;
+    const { Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, STATUS } = req.body;
 
-    const sql = `UPDATE UserTable SET Hierarchy = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Fecha_STATUS = CURRENT_TIMESTAMP WHERE UserID = ?`;
+    const sql = `
+        UPDATE UserTable 
+        SET Hierarchy = ?, Username = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Password = ?, STATUS = ?, Fecha_STATUS = CURRENT_TIMESTAMP 
+        WHERE UserID = ?`;
 
-    db.run(sql, [Hierarchy, Nombre, DNI, Telefono, Correo, userId], function (err) {
+    db.run(sql, [Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, STATUS, id], function (err) {
         if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ message: "User not found" });
 
         res.json({ message: "User updated successfully" });
     });
