@@ -809,6 +809,23 @@ app.get("/users", (req, res) => {
     });
 });
 
+app.put("/user-management/update/:id", (req, res) => {
+    const { id } = req.params;
+    const { Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password } = req.body;
+
+    const sql = `
+        UPDATE UserTable 
+        SET Hierarchy = ?, Username = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Password = ?, Fecha_STATUS = CURRENT_TIMESTAMP
+        WHERE UserID = ?
+    `;
+
+    db.run(sql, [Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "User updated successfully" });
+    });
+});
+
+
 app.put("/clients/:id/status", (req, res) => {
     const clientId = req.params.id;
     const { STATUS } = req.body;
@@ -852,68 +869,6 @@ app.put("/clients/:id", (req, res) => {
         res.json({ message: "Client updated successfully", changes: this.changes });
     });
 });
-
-app.get("/user-management", (req, res) => {
-    const sql = "SELECT UserID, Hierarchy, Username, Nombre, DNI, Telefono, Correo, STATUS FROM UserTable";
-
-    db.all(sql, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
-});
-
-// Endpoint to update user details (including password)
-app.put("/user-management/update/:id", (req, res) => {
-    const { id } = req.params;
-    const { Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, STATUS } = req.body;
-
-    const sql = `
-        UPDATE UserTable 
-        SET Hierarchy = ?, Username = ?, Nombre = ?, DNI = ?, Telefono = ?, Correo = ?, Password = ?, STATUS = ?, Fecha_STATUS = CURRENT_TIMESTAMP 
-        WHERE UserID = ?`;
-
-    db.run(sql, [Hierarchy, Username, Nombre, DNI, Telefono, Correo, Password, STATUS, id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ message: "User not found" });
-
-        res.json({ message: "User updated successfully" });
-    });
-});
-
-app.put("/user-management/status/:id", (req, res) => {
-    const userId = req.params.id;
-    const { STATUS } = req.body;
-
-    if (!STATUS) return res.status(400).json({ error: "STATUS field is required." });
-
-    const sql = `UPDATE UserTable SET STATUS = ?, Fecha_STATUS = CURRENT_TIMESTAMP WHERE UserID = ?`;
-
-    db.run(sql, [STATUS, userId], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-
-        res.json({ message: "User status updated successfully" });
-    });
-});
-
-// Endpoint to update user password
-app.put("/user-management/password/:id", (req, res) => {
-    const { id } = req.params;
-    const { newPassword } = req.body;
-
-    if (!newPassword || newPassword.length < 6) {
-        return res.status(400).json({ error: "Password must be at least 6 characters long" });
-    }
-
-    const sql = `UPDATE UserTable SET Password = ? WHERE UserID = ?`;
-
-    db.run(sql, [newPassword, id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ message: "User not found" });
-
-        res.json({ message: "Password updated successfully" });
-    });
-});
-
 
 // Populate the database with test data
 app.post("/populate-test-data", (req, res) => {
