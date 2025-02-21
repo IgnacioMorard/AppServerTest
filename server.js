@@ -12,13 +12,41 @@ app.use(cors());
 // Connect to the new SQLite database
 const db = new sqlite3.Database('./app_database.db', (err) => {
     if (err) {
-        console.error('Error opening database:', err.message);
+        console.error('❌ Error opening database:', err.message);
     } else {
-        console.log('Connected to the database.');
+        console.log('✅ Connected to the database.');
+
+        // Apply PRAGMA settings to ensure correct behavior
+        db.serialize(() => {
+            db.run("PRAGMA foreign_keys = ON;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+
+            // ✅ Verify PRAGMA settings were applied
+            db.all("PRAGMA database_list;", (err, rows) => {
+                if (err) {
+                    console.error("❌ Error setting database PRAGMA:", err.message);
+                } else {
+                    console.log("✅ PRAGMA settings applied successfully:", rows);
+                }
+            });
+
+            // ✅ Check SQLite timezone
+            db.get("SELECT datetime('now', 'localtime') AS CurrentTime", (err, row) => {
+                if (err) {
+                    console.error("❌ Error checking database time:", err.message);
+                } else {
+                    console.log("🕒 Current Database Time (localtime):", row.CurrentTime);
+                }
+            });
+        });
     }
 });
 
-console.log("Current Database Time:", new Date().toLocaleString());
 // Middleware
 app.use(express.json());
 
