@@ -896,9 +896,9 @@ app.post("/populate-test-data", (req, res) => {
 
         // Insert Clients
         db.run(`INSERT INTO ClientTable (Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, FechaModif, Saldo, STATUS, Last_Modif_By) VALUES 
-                ('Regular Customer', 'Carlos Lopez', '99887766', '555-9999', 'carlos@example.com', 'Street 123', '-34.6037,-58.3816', DATETIME('now'), 0, 'Active', 1),
-                ('Business Client', 'Ana Martinez', '66778899', '555-8888', 'ana@example.com', 'Avenue 456', '-34.5987,-58.3852', DATETIME('now'), 0, 'Active', 2),
-                ('VIP Client', 'Luis Ramirez', '55443322', '555-7777', 'luis@example.com', 'Street 789', '-34.6020,-58.3800', DATETIME('now'), 0, 'Active', 1)`);
+                ('Regular Customer', 'Carlos Lopez', '99887766', '555-9999', 'carlos@example.com', 'Street 123', '-34.6037,-58.3816', datetime('now', 'localtime'), 0, 'Active', 1),
+                ('Business Client', 'Ana Martinez', '66778899', '555-8888', 'ana@example.com', 'Avenue 456', '-34.5987,-58.3852', datetime('now', 'localtime'), 0, 'Active', 2),
+                ('VIP Client', 'Luis Ramirez', '55443322', '555-7777', 'luis@example.com', 'Street 789', '-34.6020,-58.3800', datetime('now', 'localtime'), 0, 'Active', 1)`);
 
         // Insert Products/Services
         db.run(`INSERT INTO Srvc_ProdTable (Descript, Valor, UserID) VALUES 
@@ -907,16 +907,16 @@ app.post("/populate-test-data", (req, res) => {
 
         // Insert Transactions
         db.run(`INSERT INTO TransacTable (ClientID, UserID, Valor, Pago_EFE, Pago_MP, Pago_BOT, Deuda, Lat_Long, Fecha) VALUES 
-                (1, 1, 5000, 2000, 2500, 500, 0, '-34.6037,-58.3816', DATETIME('now')),
-                (2, 2, 3000, 1000, 1000, 1000, 500, '-34.5987,-58.3852', DATETIME('now')),
-                (3, 1, 4000, 2000, 1000, 1000, 0, '-34.6030,-58.3820', DATETIME('now')),
-                (3, 2, 6000, 3000, 2000, 1000, 0, '-34.6000,-58.3840', DATETIME('now')),
-                (1, 1, 4500, 2500, 1500, 500, 0, '-34.6015,-58.3865', DATETIME('now')),
-                (2, 2, 5200, 2200, 2000, 1000, 0, '-34.6045,-58.3890', DATETIME('now')),
-                (3, 1, 3200, 1200, 1000, 1000, 0, '-34.6025,-58.3875', DATETIME('now')),
-                (1, 2, 4800, 2800, 1000, 1000, 0, '-34.6010,-58.3880', DATETIME('now')),
-                (2, 1, 5700, 2700, 2000, 1000, 0, '-34.6035,-58.3905', DATETIME('now')),
-                (3, 2, 6100, 3100, 2000, 1000, 0, '-34.6050,-58.3920', DATETIME('now'))`);
+                (1, 1, 5000, 2000, 2500, 500, 0, '-34.6037,-58.3816', datetime('now', 'localtime')),
+                (2, 2, 3000, 1000, 1000, 1000, 500, '-34.5987,-58.3852', datetime('now', 'localtime')),
+                (3, 1, 4000, 2000, 1000, 1000, 0, '-34.6030,-58.3820', datetime('now', 'localtime')),
+                (3, 2, 6000, 3000, 2000, 1000, 0, '-34.6000,-58.3840', datetime('now', 'localtime')),
+                (1, 1, 4500, 2500, 1500, 500, 0, '-34.6015,-58.3865', datetime('now', 'localtime')),
+                (2, 2, 5200, 2200, 2000, 1000, 0, '-34.6045,-58.3890', datetime('now', 'localtime')),
+                (3, 1, 3200, 1200, 1000, 1000, 0, '-34.6025,-58.3875', datetime('now', 'localtime')),
+                (1, 2, 4800, 2800, 1000, 1000, 0, '-34.6010,-58.3880', datetime('now', 'localtime')),
+                (2, 1, 5700, 2700, 2000, 1000, 0, '-34.6035,-58.3905', datetime('now', 'localtime')),
+                (3, 2, 6100, 3100, 2000, 1000, 0, '-34.6050,-58.3920', datetime('now', 'localtime'))`);
 
         // Insert Inventory (Linked to Transactions)
         db.run(`INSERT INTO InventarioTable (TransacID, Srvc_Prod_ID, Amount, Costo) VALUES 
@@ -933,9 +933,9 @@ app.post("/populate-test-data", (req, res) => {
 
         // Insert Expenses (Egresos)
         db.run(`INSERT INTO Egresos (UserID, Class, Descript, Valor, FechaAct) VALUES 
-                (1, 'Combustible', 'Gas for delivery', 1200, DATETIME('now')),
-                (2, 'Mecanico', 'Truck repair', 1700, DATETIME('now')),
-                (1, 'Varios', 'Miscellaneous expenses', 800, DATETIME('now'))`);
+                (1, 'Combustible', 'Gas for delivery', 1200, datetime('now', 'localtime')),
+                (2, 'Mecanico', 'Truck repair', 1700, datetime('now', 'localtime')),
+                (1, 'Varios', 'Miscellaneous expenses', 800, datetime('now', 'localtime'))`);
 
         db.run("COMMIT", (err) => {
             if (err) {
