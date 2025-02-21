@@ -3,7 +3,7 @@ console.log("Timezone set to:", process.env.TZ);
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
-
+console.log("Current Server Time:", new Date().toLocaleString());
 const app = express();
 
 // Enable CORS for all requests
@@ -34,7 +34,7 @@ db.serialize(() => {
             Correo TEXT,
             Password TEXT NOT NULL,
             STATUS TEXT DEFAULT 'Active',
-            Fecha_STATUS DATETIME DEFAULT CURRENT_TIMESTAMP
+            Fecha_STATUS DATETIME DEFAULT (datetime('now', 'localtime'))
         );
     `);
 
@@ -48,7 +48,7 @@ db.serialize(() => {
             Correo TEXT,
             Ref_Address TEXT,
             Last_Lat_Long TEXT,
-            FechaModif DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FechaModif DATETIME DEFAULT (datetime('now', 'localtime')),
             Saldo INTEGER DEFAULT 0,
             STATUS TEXT DEFAULT 'Active',
             Last_Modif_By INTEGER,
@@ -67,7 +67,7 @@ db.serialize(() => {
             Pago_BOT INTEGER DEFAULT 0,
             Deuda INTEGER DEFAULT 0,
             Lat_Long TEXT,
-            Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+            Fecha DATETIME DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (ClientID) REFERENCES ClientTable(ClientID) ON DELETE RESTRICT,
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
@@ -90,7 +90,7 @@ db.serialize(() => {
             Srvc_Prod_ID INTEGER PRIMARY KEY AUTOINCREMENT,
             Descript TEXT NOT NULL,
             Valor INTEGER NOT NULL,
-            FechaAct DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FechaAct DATETIME DEFAULT (datetime('now', 'localtime')),
             UserID INTEGER NOT NULL,
             Status TEXT NOT NULL DEFAULT 'Activo',
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
@@ -101,7 +101,7 @@ db.serialize(() => {
         CREATE TABLE IF NOT EXISTS Egresos (
             EgresoID INTEGER PRIMARY KEY AUTOINCREMENT,
             UserID INTEGER NOT NULL,
-            FechaAct DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FechaAct DATETIME DEFAULT (datetime('now', 'localtime')),
             Class TEXT NOT NULL,   -- Type of expense (Mecanico, Combustible, Varios)
             Descript TEXT NOT NULL, -- Additional details
             Valor INTEGER NOT NULL,
