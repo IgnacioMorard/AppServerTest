@@ -1,4 +1,5 @@
-process.env.TZ = 'America/Argentina/Buenos_Aires';
+process.env.TZ = 'Etc/GMT+3';
+console.log("Timezone set to:", process.env.TZ);
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
@@ -16,7 +17,6 @@ const db = new sqlite3.Database('./app_database.db', (err) => {
         console.log('Connected to the database.');
     }
 });
-
 // Middleware
 app.use(express.json());
 
