@@ -18,6 +18,14 @@ const db = new sqlite3.Database('./app_database.db', (err) => {
 
         // Apply PRAGMA settings to ensure correct behavior
         db.serialize(() => {
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA foreign_keys = ON;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            
+            // ✅ Force SQLite to use local time for all timestamps
             db.run("PRAGMA foreign_keys = ON;");
             db.run("PRAGMA busy_timeout = 5000;");
             db.run("PRAGMA journal_mode = WAL;");
@@ -25,7 +33,72 @@ const db = new sqlite3.Database('./app_database.db', (err) => {
             db.run("PRAGMA temp_store = MEMORY;");
             db.run("PRAGMA auto_vacuum = 1;");
             db.run("PRAGMA cache_size = -5000;");
-
+            
+            // ✅ Set SQLite to Argentina Timezone
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA foreign_keys = ON;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA foreign_keys = ON;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA foreign_keys = ON;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA foreign_keys = ON;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
+            db.run("PRAGMA busy_timeout = 5000;");
+            db.run("PRAGMA journal_mode = WAL;");
+            db.run("PRAGMA synchronous = NORMAL;");
+            db.run("PRAGMA temp_store = MEMORY;");
+            db.run("PRAGMA auto_vacuum = 1;");
+            db.run("PRAGMA cache_size = -5000;");
             // ✅ Verify PRAGMA settings were applied
             db.all("PRAGMA database_list;", (err, rows) => {
                 if (err) {
