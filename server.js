@@ -12,114 +12,13 @@ app.use(cors());
 // Connect to the new SQLite database
 const db = new sqlite3.Database('./app_database.db', (err) => {
     if (err) {
-        console.error('❌ Error opening database:', err.message);
+        console.error('Error opening database:', err.message);
     } else {
-        console.log('✅ Connected to the database.');
-
-        // Apply PRAGMA settings to ensure correct behavior
-        db.serialize(() => {
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA foreign_keys = ON;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            
-            // ✅ Force SQLite to use local time for all timestamps
-            db.run("PRAGMA foreign_keys = ON;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            
-            // ✅ Set SQLite to Argentina Timezone
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA foreign_keys = ON;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA foreign_keys = ON;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA foreign_keys = ON;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA foreign_keys = ON;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            db.run("PRAGMA busy_timeout = 5000;");
-            db.run("PRAGMA journal_mode = WAL;");
-            db.run("PRAGMA synchronous = NORMAL;");
-            db.run("PRAGMA temp_store = MEMORY;");
-            db.run("PRAGMA auto_vacuum = 1;");
-            db.run("PRAGMA cache_size = -5000;");
-            // ✅ Verify PRAGMA settings were applied
-            db.all("PRAGMA database_list;", (err, rows) => {
-                if (err) {
-                    console.error("❌ Error setting database PRAGMA:", err.message);
-                } else {
-                    console.log("✅ PRAGMA settings applied successfully:", rows);
-                }
-            });
-
-            // ✅ Check SQLite timezone
-            db.get("SELECT datetime('now', 'localtime') AS CurrentTime", (err, row) => {
-                if (err) {
-                    console.error("❌ Error checking database time:", err.message);
-                } else {
-                    console.log("🕒 Current Database Time (localtime):", row.CurrentTime);
-                }
-            });
-        });
+        console.log('Connected to the database.');
     }
 });
 
+console.log("Current DatabaseServer Time:", new Date().toLocaleString());
 // Middleware
 app.use(express.json());
 
@@ -137,7 +36,7 @@ db.serialize(() => {
             Correo TEXT,
             Password TEXT NOT NULL,
             STATUS TEXT DEFAULT 'Active',
-            Fecha_STATUS DATETIME DEFAULT (datetime('now', 'localtime'))
+            Fecha_STATUS DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours'))
         );
     `);
 
@@ -151,7 +50,7 @@ db.serialize(() => {
             Correo TEXT,
             Ref_Address TEXT,
             Last_Lat_Long TEXT,
-            FechaModif DATETIME DEFAULT (datetime('now', 'localtime')),
+            FechaModif DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
             Saldo INTEGER DEFAULT 0,
             STATUS TEXT DEFAULT 'Active',
             Last_Modif_By INTEGER,
@@ -170,7 +69,7 @@ db.serialize(() => {
             Pago_BOT INTEGER DEFAULT 0,
             Deuda INTEGER DEFAULT 0,
             Lat_Long TEXT,
-            Fecha DATETIME DEFAULT (datetime('now', 'localtime')),
+            Fecha DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
             FOREIGN KEY (ClientID) REFERENCES ClientTable(ClientID) ON DELETE RESTRICT,
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
@@ -193,18 +92,18 @@ db.serialize(() => {
             Srvc_Prod_ID INTEGER PRIMARY KEY AUTOINCREMENT,
             Descript TEXT NOT NULL,
             Valor INTEGER NOT NULL,
-            FechaAct DATETIME DEFAULT (datetime('now', 'localtime')),
+            FechaAct DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
             UserID INTEGER NOT NULL,
             Status TEXT NOT NULL DEFAULT 'Activo',
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
-    `);    
+    `);
 
     db.run(`
         CREATE TABLE IF NOT EXISTS Egresos (
             EgresoID INTEGER PRIMARY KEY AUTOINCREMENT,
             UserID INTEGER NOT NULL,
-            FechaAct DATETIME DEFAULT (datetime('now', 'localtime')),
+            FechaAct DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
             Class TEXT NOT NULL,   -- Type of expense (Mecanico, Combustible, Varios)
             Descript TEXT NOT NULL, -- Additional details
             Valor INTEGER NOT NULL,
@@ -233,6 +132,7 @@ db.serialize(() => {
         }
     });
 });
+
 
 // Base route (for testing)
 app.get('/', (req, res) => {
