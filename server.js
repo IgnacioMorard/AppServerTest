@@ -17,6 +17,8 @@ const db = new sqlite3.Database('./app_database.db', (err) => {
         console.log('Connected to the database.');
     }
 });
+
+console.log("Current Database Time:", new Date().toLocaleString());
 // Middleware
 app.use(express.json());
 
