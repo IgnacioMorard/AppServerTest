@@ -947,6 +947,16 @@ app.post("/populate-test-data", (req, res) => {
     });
 });
 
+// API Endpoint to Download the Database
+app.get('/download-db', (req, res) => {
+    const filePath = '/opt/render/data/app_database.db';  // Update if needed
+    res.download(filePath, 'backup.db', (err) => {
+        if (err) {
+            console.error('Error sending the database file:', err);
+            res.status(500).send('Error downloading the database');
+        }
+    });
+});
 
 // Start the server
 app.listen(9904, () => {
