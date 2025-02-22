@@ -897,7 +897,7 @@ app.post("/populate-test-data", (req, res) => {
         // Insert Clients
         db.run(`INSERT INTO ClientTable (Descript, NombreRef, DNIRef, Nro_WSP, Correo, Ref_Address, Last_Lat_Long, FechaModif, Saldo, STATUS, Last_Modif_By) VALUES 
                 ('Regular Customer', 'Carlos Lopez', '99887766', '555-9999', 'carlos@example.com', 'Street 123', '-34.6037,-58.3816', datetime('now', 'localtime'), 0, 'Active', 1),
-                ('Business Client', 'Ana Martinez', '66778899', '555-8888', 'ana@example.com', 'Avenue 456', '-34.5987,-58.3852', datetime('now', 'localtime'), 0, 'Active', 2),
+                ('Business Client', 'Juana Martinez', '66778899', '555-8888', 'ana@example.com', 'Avenue 456', '-34.5987,-58.3852', datetime('now', 'localtime'), 0, 'Active', 2),
                 ('VIP Client', 'Luis Ramirez', '55443322', '555-7777', 'luis@example.com', 'Street 789', '-34.6020,-58.3800', datetime('now', 'localtime'), 0, 'Active', 1)`);
 
         // Insert Products/Services
