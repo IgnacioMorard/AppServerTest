@@ -1,9 +1,8 @@
-process.env.TZ = 'Etc/GMT+3';
-console.log("Timezone set to:", process.env.TZ);
+process.env.TZ = 'America/Argentina/Buenos_Aires';
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
-console.log("Current Server Time:", new Date().toLocaleString());
+
 const app = express();
 
 // Enable CORS for all requests
@@ -18,7 +17,6 @@ const db = new sqlite3.Database('./app_database.db', (err) => {
     }
 });
 
-console.log("Current DatabaseServer Time:", new Date().toLocaleString());
 // Middleware
 app.use(express.json());
 
@@ -36,7 +34,7 @@ db.serialize(() => {
             Correo TEXT,
             Password TEXT NOT NULL,
             STATUS TEXT DEFAULT 'Active',
-            Fecha_STATUS DATETIME DEFAULT (datetime('now', '-3 hours'))
+            Fecha_STATUS DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     `);
 
@@ -50,7 +48,7 @@ db.serialize(() => {
             Correo TEXT,
             Ref_Address TEXT,
             Last_Lat_Long TEXT,
-            FechaModif DATETIME DEFAULT (datetime('now', '-3 hours')),
+            FechaModif DATETIME DEFAULT CURRENT_TIMESTAMP,
             Saldo INTEGER DEFAULT 0,
             STATUS TEXT DEFAULT 'Active',
             Last_Modif_By INTEGER,
@@ -69,19 +67,43 @@ db.serialize(() => {
             Pago_BOT INTEGER DEFAULT 0,
             Deuda INTEGER DEFAULT 0,
             Lat_Long TEXT,
-            Fecha DATETIME DEFAULT (datetime('now', '-3 hours')),
+            Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (ClientID) REFERENCES ClientTable(ClientID) ON DELETE RESTRICT,
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
     `);
 
     db.run(`
+        CREATE TABLE IF NOT EXISTS InventarioTable (
+            TransacID INTEGER NOT NULL,
+            Srvc_Prod_ID INTEGER NOT NULL,
+            Amount INTEGER NOT NULL,
+            Costo INTEGER NOT NULL,
+            PRIMARY KEY (TransacID, Srvc_Prod_ID),
+            FOREIGN KEY (TransacID) REFERENCES TransacTable(TransacID) ON DELETE RESTRICT,
+            FOREIGN KEY (Srvc_Prod_ID) REFERENCES Srvc_ProdTable(Srvc_Prod_ID) ON DELETE RESTRICT
+        );
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS Srvc_ProdTable (
+            Srvc_Prod_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            Descript TEXT NOT NULL,
+            Valor INTEGER NOT NULL,
+            FechaAct DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UserID INTEGER NOT NULL,
+            Status TEXT NOT NULL DEFAULT 'Activo',
+            FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
+        );
+    `);    
+
+    db.run(`
         CREATE TABLE IF NOT EXISTS Egresos (
             EgresoID INTEGER PRIMARY KEY AUTOINCREMENT,
             UserID INTEGER NOT NULL,
-            FechaAct DATETIME DEFAULT (datetime('now', '-3 hours')),
-            Class TEXT NOT NULL,
-            Descript TEXT NOT NULL,
+            FechaAct DATETIME DEFAULT CURRENT_TIMESTAMP,
+            Class TEXT NOT NULL,   -- Type of expense (Mecanico, Combustible, Varios)
+            Descript TEXT NOT NULL, -- Additional details
             Valor INTEGER NOT NULL,
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
@@ -284,15 +306,15 @@ app.post('/registerTransaction', (req, res) => {
     const { clientId, userId, Valor, Pago_EFE, Pago_MP, Deuda, Lat_long } = req.body;
 
     const query = `
-        INSERT INTO TransacTable (ClientID, UserID, Valor, Pago_EFE, Pago_MP, Deuda, Lat_Long)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO TransacTable (ClientID, UserID, Valor, Pago_EFE, Pago_MP, Deuda, Lat_Long, Fecha)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
     `;
 
     const params = [clientId, userId, Valor, Pago_EFE, Pago_MP, Deuda, Lat_long];
 
     db.run(query, params, function (err) {
         if (err) {
-            console.error('Error inserting data:', err.message);
+            console.error('Error inserting transaction:', err.message);
             return res.status(500).json({ error: 'Failed to insert transaction' });
         }
 
@@ -300,7 +322,6 @@ app.post('/registerTransaction', (req, res) => {
         res.json({ TransacID: this.lastID });
     });
 });
-
 
 // Fetch only "Activo" products
 app.get("/products", (req, res) => {
@@ -493,7 +514,8 @@ app.post('/add-egreso', (req, res) => {
         return res.status(400).json({ error: "Valid Valor is required" });
     }
 
-    const sql = `INSERT INTO Egresos (UserID, Class, Descript, Valor) VALUES (?, ?, ?, ?)`;
+    // ✅ Explicitly set the timestamp on the server-side
+    const sql = `INSERT INTO Egresos (UserID, Class, Descript, Valor, FechaAct) VALUES (?, ?, ?, ?, datetime('now', 'localtime'))`;
     const values = [UserID, Class, Descript, Valor];
 
     db.run(sql, values, function (err) {
@@ -565,7 +587,7 @@ app.get("/transactions", (req, res) => {
     let { startDate, endDate } = req.query;
 
     if (!startDate || !endDate) {
-        const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+        const today = new Date().toLocaleDateString('en-CA'); // Correct local date in YYYY-MM-DD format
         startDate = endDate = today; // Default to today's transactions
     }
 
@@ -600,7 +622,7 @@ app.get("/expenses", (req, res) => {
     let { startDate, endDate, UserID } = req.query;
 
     if (!startDate || !endDate) {
-        const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+        const today = new Date().toLocaleDateString('en-CA'); // Correct local date in YYYY-MM-DD format
         startDate = endDate = today; // Default to today's expenses
     }
 
