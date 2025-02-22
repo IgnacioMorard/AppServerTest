@@ -656,7 +656,7 @@ app.get("/inventory", (req, res) => {
     let { startDate, endDate, UserID } = req.query;
 
     if (!startDate || !endDate) {
-        const today = new Date().toISOString().split('T')[0]; // Default: Today
+        const today = new Date().toLocaleDateString('en-CA'); // ✅ Correct local time, format YYYY-MM-DD
         startDate = endDate = today;
     }
 
@@ -693,7 +693,7 @@ app.get("/inventory-summary", (req, res) => {
     let { startDate, endDate, UserID } = req.query;
 
     if (!startDate || !endDate) {
-        const today = new Date().toISOString().split('T')[0]; // Default: Today
+        const today = new Date().toLocaleDateString('en-CA'); // ✅ Correct local time, format YYYY-MM-DD
         startDate = endDate = today;
     }
 
@@ -725,7 +725,7 @@ app.get("/consolidated-report", async (req, res) => {
     let { startDate, endDate, UserID } = req.query;
 
     if (!startDate || !endDate) {
-        const today = new Date().toISOString().split("T")[0]; // Default to today
+        const today = new Date().toLocaleDateString('en-CA'); // ✅ Correct local time, format YYYY-MM-DD
         startDate = endDate = today;
     }
 
