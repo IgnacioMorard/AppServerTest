@@ -36,7 +36,7 @@ db.serialize(() => {
             Correo TEXT,
             Password TEXT NOT NULL,
             STATUS TEXT DEFAULT 'Active',
-            Fecha_STATUS DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours'))
+            Fecha_STATUS DATETIME DEFAULT (datetime('now', '-3 hours'))
         );
     `);
 
@@ -50,7 +50,7 @@ db.serialize(() => {
             Correo TEXT,
             Ref_Address TEXT,
             Last_Lat_Long TEXT,
-            FechaModif DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
+            FechaModif DATETIME DEFAULT (datetime('now', '-3 hours')),
             Saldo INTEGER DEFAULT 0,
             STATUS TEXT DEFAULT 'Active',
             Last_Modif_By INTEGER,
@@ -69,32 +69,8 @@ db.serialize(() => {
             Pago_BOT INTEGER DEFAULT 0,
             Deuda INTEGER DEFAULT 0,
             Lat_Long TEXT,
-            Fecha DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
+            Fecha DATETIME DEFAULT (datetime('now', '-3 hours')),
             FOREIGN KEY (ClientID) REFERENCES ClientTable(ClientID) ON DELETE RESTRICT,
-            FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
-        );
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS InventarioTable (
-            TransacID INTEGER NOT NULL,
-            Srvc_Prod_ID INTEGER NOT NULL,
-            Amount INTEGER NOT NULL,
-            Costo INTEGER NOT NULL,
-            PRIMARY KEY (TransacID, Srvc_Prod_ID),
-            FOREIGN KEY (TransacID) REFERENCES TransacTable(TransacID) ON DELETE RESTRICT,
-            FOREIGN KEY (Srvc_Prod_ID) REFERENCES Srvc_ProdTable(Srvc_Prod_ID) ON DELETE RESTRICT
-        );
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS Srvc_ProdTable (
-            Srvc_Prod_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            Descript TEXT NOT NULL,
-            Valor INTEGER NOT NULL,
-            FechaAct DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
-            UserID INTEGER NOT NULL,
-            Status TEXT NOT NULL DEFAULT 'Activo',
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
     `);
@@ -103,9 +79,9 @@ db.serialize(() => {
         CREATE TABLE IF NOT EXISTS Egresos (
             EgresoID INTEGER PRIMARY KEY AUTOINCREMENT,
             UserID INTEGER NOT NULL,
-            FechaAct DATETIME DEFAULT (datetime('now', 'localtime', '-3 hours')),
-            Class TEXT NOT NULL,   -- Type of expense (Mecanico, Combustible, Varios)
-            Descript TEXT NOT NULL, -- Additional details
+            FechaAct DATETIME DEFAULT (datetime('now', '-3 hours')),
+            Class TEXT NOT NULL,
+            Descript TEXT NOT NULL,
             Valor INTEGER NOT NULL,
             FOREIGN KEY (UserID) REFERENCES UserTable(UserID) ON DELETE RESTRICT
         );
@@ -132,7 +108,6 @@ db.serialize(() => {
         }
     });
 });
-
 
 // Base route (for testing)
 app.get('/', (req, res) => {
