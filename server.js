@@ -9,11 +9,11 @@ const app = express();
 app.use(cors());
 
 // Connect to the new SQLite database
-const db = new sqlite3.Database('./app_database.db', (err) => {
+const db = new sqlite3.Database('/opt/render/data/app_database.db', (err) => {
     if (err) {
         console.error('Error opening database:', err.message);
     } else {
-        console.log('Connected to the database.');
+        console.log('✅ Connected to the persistent database.');
     }
 });
 
